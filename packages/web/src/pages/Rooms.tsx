@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
-import { useRoomsStore } from '../stores/useRoomsStore';
+import { useRooms, useCreateRoom, useUpdateRoom, useDeleteRoom } from '../hooks/queries/useRooms';
 import { useNotificationStore } from '../stores/useNotificationStore';
 
 interface Room {
@@ -22,15 +22,14 @@ interface FormErrors {
 
 export default function Rooms() {
   const { can } = usePermissions();
-  const { 
-    rooms, 
-    isLoading: loading, 
-    error: storeError, 
-    fetchRooms, 
-    addRoom: storeAddRoom,
-    updateRoom: storeUpdateRoom,
-    deleteRoom: storeDeleteRoom
-  } = useRoomsStore();
+  const { data: rooms = [], isLoading: loading, error: storeError } = useRooms();
+  const { mutateAsync: storeAddRoom } = useCreateRoom();
+  const { mutateAsync: updateMutation } = useUpdateRoom();
+  const { mutateAsync: storeDeleteRoom } = useDeleteRoom();
+
+  const storeUpdateRoom = async (id: number, data: any) => {
+    return updateMutation({ id, data });
+  };
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,9 +40,7 @@ export default function Rooms() {
   });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
-  useEffect(() => {
-    fetchRooms();
-  }, [fetchRooms]);
+
 
   const validateForm = (): FormErrors => {
     const errors: FormErrors = {};

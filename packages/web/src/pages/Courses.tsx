@@ -4,7 +4,7 @@ import { read, utils, writeFile } from 'xlsx';
 import { Search, ChevronUp, ChevronDown } from 'lucide-react';
 // import { db } from '../lib/firebase';
 // import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { useCoursesStore } from '../stores/useCoursesStore';
+import { useCourses, useCreateCourse, useUpdateCourse, useDeleteCourse } from '../hooks/queries/useCourses';
 import { useNotificationStore } from '../stores/useNotificationStore';
 
 interface Course {
@@ -42,15 +42,14 @@ type SortDirection = 'asc' | 'desc';
 
 export default function Courses() {
   const { can } = usePermissions();
-  const { 
-    courses, 
-    isLoading: loading, 
-    error: storeError, 
-    fetchCourses, 
-    addCourse: storeAddCourse,
-    updateCourse: storeUpdateCourse,
-    deleteCourse: storeDeleteCourse
-  } = useCoursesStore();
+  const { data: courses = [], isLoading: loading, error: storeError } = useCourses();
+  const { mutateAsync: storeAddCourse } = useCreateCourse();
+  const { mutateAsync: updateMutation } = useUpdateCourse();
+  const { mutateAsync: storeDeleteCourse } = useDeleteCourse();
+
+  const storeUpdateCourse = async (id: number, data: any) => {
+    return updateMutation({ id, data });
+  };
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,9 +71,7 @@ export default function Courses() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
+
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};

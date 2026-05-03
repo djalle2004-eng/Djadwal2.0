@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useProfessors, useCreateProfessor, useUpdateProfessor, useDeleteProfessor } from '../hooks/queries/useProfessors';
 import { useNotificationStore } from '../stores/useNotificationStore';
 
 interface Professor {
@@ -105,16 +105,16 @@ const academicTitles = [
 
 export default function Professors() {
   const { can } = usePermissions();
-  const { 
-    professors, 
-    isLoading: loading, 
-    error, 
-    fetchProfessors, 
-    addProfessor: storeAddProfessor,
-    updateProfessor: storeUpdateProfessor,
-    deleteProfessor: storeDeleteProfessor,
-    deleteAllProfessors: storeDeleteAllProfessors
-  } = useProfessorsStore();
+  const { data: professors = [], isLoading: loading, error } = useProfessors();
+  const { mutateAsync: storeAddProfessor } = useCreateProfessor();
+  const { mutateAsync: updateMutation } = useUpdateProfessor();
+  const { mutateAsync: storeDeleteProfessor } = useDeleteProfessor();
+
+  // Wrapper for update since the old store used (id, data) and mutation uses ({ id, data })
+  const storeUpdateProfessor = async (id: number, data: any) => {
+    return updateMutation({ id, data });
+  };
+
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -135,9 +135,7 @@ export default function Professors() {
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchProfessors();
-  }, [fetchProfessors]);
+
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
