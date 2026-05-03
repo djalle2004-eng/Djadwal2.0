@@ -2669,11 +2669,11 @@ export default function Schedule() {
 
           <button
             onClick={() => setIsSchedulerOpen(true)}
-            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 shadow-lg transition-all transform hover:scale-105 font-bold"
+            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 shadow-lg font-black animate-bounce-slow"
             disabled={totalIsLoading}
           >
             <span className="text-xl">⚡</span>
-            <span>توليد الجدول تلقائياً</span>
+            <span>توليد تلقائي (AI)</span>
           </button>
 
           <button
@@ -2762,40 +2762,48 @@ export default function Schedule() {
         </div>
 
         {/* أزرار العمليات */}
-        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-center">
+        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-center justify-center">
           {selectedSpecialization && (
-            <div className="flex-1 flex items-center bg-purple-50 p-3 rounded-xl border border-purple-100 animate-pulse-subtle">
-              <span className="text-2xl ml-3">✨</span>
-              <div className="flex-1">
-                <p className="text-purple-900 font-bold text-sm">توليد جدول ذكي لهذا التخصص؟</p>
-                <p className="text-purple-700 text-xs">سيقوم الذكاء الاصطناعي بتوزيع الحصص بدون تعارضات.</p>
+            <div className="w-full flex flex-col items-center bg-gradient-to-br from-purple-600 to-indigo-700 p-8 rounded-2xl border-4 border-white shadow-2xl transform hover:scale-[1.01] transition-all mb-4">
+              <div className="bg-white/20 p-4 rounded-full mb-4">
+                <span className="text-5xl">🎯</span>
               </div>
+              <h3 className="text-white text-2xl font-black mb-2">هل تريد توليد الجدول تلقائياً؟</h3>
+              <p className="text-purple-100 mb-6 text-center max-w-md">
+                سيقوم المحرك الجيني بتوليد أفضل توزيع للحصص لتخصص <b>{selectedSpecialization}</b> مع تجنب كافة التعارضات وتفضيلات الأساتذة.
+              </p>
               <button
                 onClick={() => setIsSchedulerOpen(true)}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold shadow-md transition-all whitespace-nowrap"
+                className="bg-white text-purple-700 hover:bg-purple-50 px-12 py-4 rounded-xl font-black text-xl shadow-xl transition-all hover:shadow-2xl active:scale-95 flex items-center gap-3"
                 disabled={totalIsLoading}
               >
-                بدء التوليد التلقائي
+                <span>⚡</span>
+                بدء التوليد التلقائي الآن
               </button>
             </div>
           )}
           
-          <button
-            onClick={() => cleanDuplicateAssignments()}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center transition-colors"
-            disabled={totalIsLoading}
-          >
-            <span className="ml-2">🧹</span>
-            تنظيف التكرار
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => cleanDuplicateAssignments()}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-lg flex items-center font-bold"
+              disabled={totalIsLoading}
+            >
+              <span className="ml-2">🧹</span>
+              تنظيف التكرار
+            </button>
+          </div>
         </div>
       </div>
 
         {/* عرض المعلومات المختارة */}
-        <div className="mt-4 p-3 bg-gray-50 rounded text-center">
+        <div className="mt-4 p-3 bg-gray-50 rounded text-center relative">
           <h2 className="text-lg font-semibold">
             جدول محاضرات {selectedSpecialization || 'جميع التخصصات'} | {getSelectedSemesterName()} | السنة الجامعية {currentYear?.year_name || 'غير محدد'}
           </h2>
+          <div className="absolute top-0 right-0 p-1 text-[8px] text-gray-400">
+            v2.1-AI-ENABLED-1759
+          </div>
         </div>
 
 
