@@ -117,15 +117,14 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* FORCE UPDATE BANNER */}
-      <div className="bg-red-600 text-white text-center py-1 text-xs font-bold animate-pulse">
-        🚀 النسخة الذكية v2.5 مفعلة - إذا رأيت هذا الشريط فأنت تشاهد التحديث الجديد
-      </div>
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="flex">
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex flex-col">
+        {/* FORCE UPDATE BANNER */}
+        <div className="bg-red-600 text-white text-center py-1 text-xs font-bold animate-pulse z-50">
+          🚀 النسخة الذكية v2.5 مفعلة - إذا رأيت هذا الشريط فأنت تشاهد التحديث الجديد
+        </div>
+        <div className="flex flex-1 overflow-hidden">
           <Sidebar navigation={navigation} />
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col overflow-auto">
             {/* Header Bar */}
             <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 py-4 shadow-sm transition-colors duration-200">
               <div className="flex items-center justify-between">
