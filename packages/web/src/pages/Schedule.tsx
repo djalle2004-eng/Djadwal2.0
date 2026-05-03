@@ -507,7 +507,7 @@ export default function Schedule() {
 
   // Helper function to check if a professor is temporary
   const isProfessorTemporary = (professor: Professor) => {
-    return professor.title === 'أستاذ(ة) مؤقت(ة)';
+    return professor.Title === 'أستاذ(ة) مؤقت(ة)';
   };
 
   // Use ref to track if initial data has been loaded
@@ -1258,7 +1258,7 @@ export default function Schedule() {
                   {group && <div className="font-bold">{group.name}</div>}
                   {course && <div>{course.name}</div>}
                   {professor && (
-                    <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                    <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                       {professor.name}
                     </div>
                   )}
@@ -1270,7 +1270,7 @@ export default function Schedule() {
                 {group && <div className="font-bold">{group.name}</div>}
                 {course && <div>{course.name}</div>}
                 {professor && (
-                  <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                  <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                     {professor.name}
                   </div>
                 )}
@@ -1794,7 +1794,7 @@ export default function Schedule() {
       setLocalIsLoading(false);
     } catch (error) {
       console.error('Error exporting to PDF:', error);
-      setError(error instanceof Error ? error : new Error(String(error)));
+      // setError(error instanceof Error ? error : new Error(String(error)));
       setLocalIsLoading(false);
     }
   };
@@ -2208,7 +2208,7 @@ export default function Schedule() {
       setLocalIsLoading(false);
     } catch (error) {
       console.error('Error exporting to PDF without temporary professors:', error);
-      setError(error instanceof Error ? error : new Error(String(error)));
+      // setError(error instanceof Error ? error : new Error(String(error)));
       setLocalIsLoading(false);
     }
   };
@@ -2491,7 +2491,7 @@ export default function Schedule() {
   const cleanDuplicateAssignments = async () => {
     try {
       setLocalIsLoading(true);
-      setError(null);
+      // setError(null);
 
       // Récupérer toutes les affectations
       const allAssignments = await window.db.getAssignments();
@@ -2502,7 +2502,7 @@ export default function Schedule() {
       const duplicates: { id: number, key: string }[] = [];
 
       // Parcourir toutes les affectations
-      allAssignments.forEach(assignment => {
+      allAssignments.forEach((assignment: any) => {
         // Vérifier que tous les champs nécessaires sont présents
         if (assignment.id &&
           assignment.professor_id &&
