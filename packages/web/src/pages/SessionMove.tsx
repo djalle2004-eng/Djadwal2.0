@@ -1,13 +1,13 @@
 import { useAcademicStore } from '../stores/useAcademicStore';
-import { useScheduleStore } from '../stores/useScheduleStore';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
-import { useCoursesStore } from '../stores/useCoursesStore';
-import { useRoomsStore } from '../stores/useRoomsStore';
-import { useGroupsStore } from '../stores/useGroupsStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { Move, Calendar, Clock, User, BookOpen, MapPin, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { useProfessors } from '../hooks/queries/useProfessors';
+import { useCourses } from '../hooks/queries/useCourses';
+import { useRooms } from '../hooks/queries/useRooms';
+import { useGroups } from '../hooks/queries/useGroups';
+import { useAssignments, useUpdateAssignment } from '../hooks/queries/useAssignments';
 
 // واجهات البيانات
 interface Professor {
@@ -89,30 +89,29 @@ export default function SessionMove() {
   // الصلاحيات
   const { can } = usePermissions();
   
-  // Stores
-  const { 
-    professors, fetchProfessors 
-  } = useProfessorsStore();
-  const { 
-    courses, fetchCourses 
-  } = useCoursesStore();
-  const { 
-    rooms, fetchRooms 
-  } = useRoomsStore();
-  const { 
-    groups, fetchGroups 
-  } = useGroupsStore();
-  const { 
-    currentYear, currentSemester 
-  } = useAcademicStore();
-  const { 
-    assignments, 
-    isLoading, 
-    error: scheduleError, 
-    fetchAssignments, 
-    updateAssignment 
-  } = useScheduleStore();
+  // Stores & Queries
+  const { currentYear, currentSemester } = useAcademicStore();
   const addNotification = useNotificationStore((state) => state.addNotification);
+
+  const { data: professors = [] } = useProfessors();
+  const { data: courses = [] } = useCourses();
+  const { data: rooms = [] } = useRooms();
+  const { data: groups = [] } = useGroups();
+  
+  const { 
+    data: assignments = [], 
+    isLoading: loading,
+    refetch: fetchAssignments
+  } = useAssignments(
+    currentYear?.year_name || '',
+    currentSemester?.semester_name || ''
+  );
+
+  const { mutateAsync: updateAssignmentMutation } = useUpdateAssignment();
+
+  const storeUpdateAssignment = async (id: number, data: any) => {
+    return updateAssignmentMutation({ id, data });
+  };
 
   // حالات النقل
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
@@ -129,25 +128,7 @@ export default function SessionMove() {
   const [filterTime, setFilterTime] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  // تحميل البيانات
-  const fetchData = useCallback(async () => {
-    try {
-      await Promise.all([
-        fetchProfessors(),
-        fetchCourses(),
-        fetchGroups(),
-        fetchRooms(),
-        fetchAssignments()
-      ]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
-    }
-  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // fetchData removed (handled by TanStack Query)
 
   const sessionsWithDetails = useMemo(() => {
     return assignments.map(assignment => {
@@ -359,7 +340,7 @@ export default function SessionMove() {
 
       // تحديث الحصة في قاعدة البيانات
       if (selectedSession.id) {
-        await updateAssignment(selectedSession.id, updatedSession);
+        await storeUpdateAssignment(selectedSession.id, updatedSession);
 
         addNotification({ type: 'success', message: 'تم نقل الحصة بنجاح' });
 

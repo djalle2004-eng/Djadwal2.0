@@ -1,15 +1,15 @@
 import { useAcademicStore } from '../stores/useAcademicStore';
-import { useScheduleStore } from '../stores/useScheduleStore';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
-import { useCoursesStore } from '../stores/useCoursesStore';
-import { useRoomsStore } from '../stores/useRoomsStore';
-import { useGroupsStore } from '../stores/useGroupsStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
 import { usePrintSettings } from '../hooks/usePrintSettings';
 import { exportTableToExcel } from '../utils/excelUtils';
 import { createTableTemplate, generatePDFFromHTML, generatePDFFromHTMLFallback } from '../utils/pdfUtils';
 import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
+import { useProfessors } from '../hooks/queries/useProfessors';
+import { useCourses } from '../hooks/queries/useCourses';
+import { useRooms } from '../hooks/queries/useRooms';
+import { useGroups } from '../hooks/queries/useGroups';
+import { useAssignments, useDeleteAssignment } from '../hooks/queries/useAssignments';
 
 // Interfaces pour les types de données
 interface Professor {
@@ -107,30 +107,25 @@ const Sessions: React.FC = () => {
 
 // Composant principal avec le contenu
 const SessionsContent = () => {
-  // Stores
-  const { 
-    professors, fetchProfessors 
-  } = useProfessorsStore();
-  const { 
-    courses, fetchCourses 
-  } = useCoursesStore();
-  const { 
-    rooms, fetchRooms 
-  } = useRoomsStore();
-  const { 
-    groups, fetchGroups 
-  } = useGroupsStore();
-  const { 
-    currentYear, currentSemester 
-  } = useAcademicStore();
-  const { 
-    assignments, 
-    isLoading: loading, 
-    error: scheduleError, 
-    fetchAssignments, 
-    deleteAssignment: storeDeleteAssignment 
-  } = useScheduleStore();
+  // Stores & Queries
+  const { currentYear, currentSemester } = useAcademicStore();
   const addNotification = useNotificationStore((state) => state.addNotification);
+
+  const { data: professors = [] } = useProfessors();
+  const { data: courses = [] } = useCourses();
+  const { data: rooms = [] } = useRooms();
+  const { data: groups = [] } = useGroups();
+  
+  const { 
+    data: assignments = [], 
+    isLoading: loading, 
+    error: scheduleError 
+  } = useAssignments(
+    currentYear?.year_name || '',
+    currentSemester?.semester_name || ''
+  );
+
+  const { mutateAsync: storeDeleteAssignment } = useDeleteAssignment();
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState<keyof AssignmentWithDetails | null>(null);
@@ -158,21 +153,8 @@ const SessionsContent = () => {
     '15.30 - 17.00'
   ];
 
-  // Fetch sessions data
-  const fetchData = useCallback(async () => {
-    try {
-      await Promise.all([
-        fetchProfessors(),
-        fetchCourses(),
-        fetchGroups(),
-        fetchRooms(),
-        fetchAssignments()
-      ]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
-    }
-  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
+  // fetchData removed (handled by TanStack Query)
+
 
   const sessionsWithDetails = useMemo(() => {
     return assignments.map(assignment => {
@@ -512,9 +494,8 @@ const SessionsContent = () => {
 
   const tableElement = React.useRef<HTMLTableElement>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // fetchData removed (handled by TanStack Query)
+
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">

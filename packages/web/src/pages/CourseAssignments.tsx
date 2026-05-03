@@ -2,11 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { usePermissions } from '../hooks/usePermissions';
 import * as XLSX from 'xlsx';
 import { useAcademicStore } from '../stores/useAcademicStore';
-import { useScheduleStore } from '../stores/useScheduleStore';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
-import { useCoursesStore } from '../stores/useCoursesStore';
-import { useRoomsStore } from '../stores/useRoomsStore';
-import { useGroupsStore } from '../stores/useGroupsStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
 import { 
@@ -14,6 +9,11 @@ import {
   generateStyledTable, 
   generateFullDocument 
 } from '../utils/printUtils';
+import { useProfessors } from '../hooks/queries/useProfessors';
+import { useCourses } from '../hooks/queries/useCourses';
+import { useRooms } from '../hooks/queries/useRooms';
+import { useGroups, useDepartments } from '../hooks/queries/useGroups';
+import { useAssignments, useCreateAssignment, useUpdateAssignment, useDeleteAssignment } from '../hooks/queries/useAssignments';
 
 // Import MUI DataGrid instead of AG Grid
 import { DataGrid, GridColDef, GridRenderCellParams, GridPaginationModel } from '@mui/x-data-grid';
@@ -238,32 +238,32 @@ const exportToExcel = (assignmentsData: any[]) => {
 const CourseAssignments: React.FC = () => {
   const { can } = usePermissions();
   
-  // Stores
-  const { 
-    professors, fetchProfessors 
-  } = useProfessorsStore();
-  const { 
-    courses, fetchCourses 
-  } = useCoursesStore();
-  const { 
-    rooms, fetchRooms 
-  } = useRoomsStore();
-  const { 
-    groups, departments, fetchGroups, fetchDepartments 
-  } = useGroupsStore();
-  const { 
-    currentYear, currentSemester 
-  } = useAcademicStore();
-  const { 
-    assignments, 
-    isLoading: loading, 
-    error: scheduleError, 
-    fetchAssignments, 
-    addAssignment: storeAddAssignment, 
-    updateAssignment: storeUpdateAssignment, 
-    deleteAssignment: storeDeleteAssignment 
-  } = useScheduleStore();
+  // Stores & Queries
+  const { currentYear, currentSemester } = useAcademicStore();
   const addNotification = useNotificationStore((state) => state.addNotification);
+
+  const { data: professors = [] } = useProfessors();
+  const { data: courses = [] } = useCourses();
+  const { data: rooms = [] } = useRooms();
+  const { data: groups = [] } = useGroups();
+  const { data: departments = [] } = useDepartments();
+  
+  const { 
+    data: assignments = [], 
+    isLoading: loading,
+    refetch: fetchAssignments 
+  } = useAssignments(
+    currentYear?.year_name || '',
+    currentSemester?.semester_name || ''
+  );
+
+  const { mutateAsync: storeAddAssignment } = useCreateAssignment();
+  const { mutateAsync: updateAssignmentMutation } = useUpdateAssignment();
+  const { mutateAsync: storeDeleteAssignment } = useDeleteAssignment();
+
+  const storeUpdateAssignment = async (id: number, data: any) => {
+    return updateAssignmentMutation({ id, data });
+  };
 
   // Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -302,31 +302,7 @@ const CourseAssignments: React.FC = () => {
   const [conflictCheckResult, setConflictCheckResult] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Memoize the fetchData function to prevent unnecessary re-renders
-  const fetchData = useCallback(async () => {
-    try {
-      await Promise.all([
-        fetchProfessors(),
-        fetchCourses(),
-        fetchGroups(),
-        fetchRooms(),
-        fetchDepartments(),
-        fetchAssignments()
-      ]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
-    }
-  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchDepartments, fetchAssignments]);
-
   const initialFetchDone = useRef(false);
-
-  useEffect(() => {
-    if (!initialFetchDone.current) {
-      fetchData();
-      initialFetchDone.current = true;
-    }
-  }, [fetchData]);
 
   // Utility function to get unique specializations from groups
   const getUniqueSpecializations = () => {

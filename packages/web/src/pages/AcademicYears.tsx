@@ -3,23 +3,45 @@ import { useAcademicStore } from '../stores/useAcademicStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
 import { AcademicYear, Semester, ImportOptions } from '../types/academicYear';
 import { Plus, Check, Download, Edit2, Save, X, Eye, EyeOff } from 'lucide-react';
+import { 
+  useAcademicYears, 
+  useSemesters, 
+  useCreateAcademicYear, 
+  useSetActiveAcademicYear, 
+  useCreateSemester, 
+  useUpdateSemester, 
+  useSetActiveSemester,
+  useImportAcademicData
+} from '../hooks/queries/useAcademic';
 
 export default function AcademicYears() {
-  const { 
-    currentYear, 
-    currentSemester,
-    years,
-    semesters,
-    isLoading: loading,
-    fetchAcademicYears,
-    addAcademicYear: storeAddAcademicYear,
-    setActiveYear,
-    fetchSemesters,
-    addSemester: storeAddSemester,
-    updateSemester: storeUpdateSemester,
-    setActiveSemester: storeSetActiveSemester,
-    importData
-  } = useAcademicStore();
+  const { currentYear, currentSemester } = useAcademicStore();
+  const { data: years = [], isLoading: loading } = useAcademicYears();
+  
+  const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
+  const { data: semesters = [] } = useSemesters(selectedYearId);
+
+  // Mutations
+  const { mutateAsync: storeAddAcademicYear } = useCreateAcademicYear();
+  const { mutateAsync: setActiveYear } = useSetActiveAcademicYear();
+  const { mutateAsync: createSemesterMutation } = useCreateSemester();
+  const { mutateAsync: updateSemesterMutation } = useUpdateSemester();
+  const { mutateAsync: setActiveSemesterMutation } = useSetActiveSemester();
+  const { mutateAsync: importDataMutation } = useImportAcademicData();
+
+  // Wrappers
+  const storeAddSemester = async (yearId: number, name: string, startDate: string, endDate: string) => {
+    return createSemesterMutation({ yearId, name, startDate, endDate });
+  };
+  const storeUpdateSemester = async (id: number, name: string, startDate: string, endDate: string, isPublic?: boolean) => {
+    return updateSemesterMutation({ id, name, startDate, endDate, isPublic });
+  };
+  const storeSetActiveSemester = async (id: number) => {
+    return setActiveSemesterMutation(id);
+  };
+  const importData = async (sourceYearId: number, targetYearId: number, options: ImportOptions) => {
+    return importDataMutation({ sourceYearId, targetYearId, options });
+  };
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
@@ -40,23 +62,15 @@ export default function AcademicYears() {
   const [editedSemesterEndDate, setEditedSemesterEndDate] = useState('');
   const [editedSemesterIsPublic, setEditedSemesterIsPublic] = useState(true);
 
-  useEffect(() => {
-    fetchAcademicYears();
-  }, []);
-
+  // fetchAcademicYears and fetchSemesters are handled by TanStack Query
   useEffect(() => {
     if (currentYear) {
       setSelectedYearId(currentYear.id);
     } else if (years.length > 0 && !selectedYearId) {
       setSelectedYearId(years[0].id);
     }
-  }, [currentYear, years]);
+  }, [currentYear, years, selectedYearId]);
 
-  useEffect(() => {
-    if (selectedYearId) {
-      fetchSemesters(selectedYearId);
-    }
-  }, [selectedYearId, fetchSemesters]);
 
   const handleAddYear = async () => {
     if (!newYearName.trim()) return;

@@ -1,11 +1,11 @@
 import { useAcademicStore } from '../stores/useAcademicStore';
-import { useScheduleStore } from '../stores/useScheduleStore';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
-import { useCoursesStore } from '../stores/useCoursesStore';
-import { useRoomsStore } from '../stores/useRoomsStore';
-import { useGroupsStore } from '../stores/useGroupsStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useProfessors } from '../hooks/queries/useProfessors';
+import { useCourses } from '../hooks/queries/useCourses';
+import { useRooms } from '../hooks/queries/useRooms';
+import { useGroups } from '../hooks/queries/useGroups';
+import { useAssignments } from '../hooks/queries/useAssignments';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Box, Snackbar, Alert } from '@mui/material';
 import { Email as EmailIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { emailService, EmailStatus } from '../services/emailService';
@@ -166,28 +166,22 @@ const translateAcademicTitle = (title: string): string => {
 };
 
 export default function ProfessorWorkload() {
-  // Stores
-  const { 
-    professors, fetchProfessors 
-  } = useProfessorsStore();
-  const { 
-    courses, fetchCourses 
-  } = useCoursesStore();
-  const { 
-    rooms, fetchRooms 
-  } = useRoomsStore();
-  const { 
-    groups, fetchGroups 
-  } = useGroupsStore();
-  const { 
-    currentYear, currentSemester 
-  } = useAcademicStore();
-  const { 
-    assignments, 
-    isLoading: isScheduleLoading, 
-    fetchAssignments 
-  } = useScheduleStore();
+  // Stores & Queries
+  const { currentYear, currentSemester } = useAcademicStore();
   const addNotification = useNotificationStore((state) => state.addNotification);
+
+  const { data: professors = [] } = useProfessors();
+  const { data: courses = [] } = useCourses();
+  const { data: rooms = [] } = useRooms();
+  const { data: groups = [] } = useGroups();
+  
+  const { 
+    data: assignments = [], 
+    isLoading: isScheduleLoading 
+  } = useAssignments(
+    currentYear?.year_name || '',
+    currentSemester?.semester_name || ''
+  );
 
   // الحالة المحلية
   const [workloads, setWorkloads] = useState<ProfessorWorkloadData[]>([]);

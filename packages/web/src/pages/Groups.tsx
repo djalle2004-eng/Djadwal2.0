@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
-import { useGroupsStore } from '../stores/useGroupsStore';
 import { useAcademicStore } from '../stores/useAcademicStore';
 import { useNotificationStore } from '../stores/useNotificationStore';
 import { buildGroupTree, getSpecializationsByDepartment } from '../services/groupService';
+import { useGroups, useDepartments, useCreateGroup, useUpdateGroup, useDeleteGroup, useDeleteAllGroups } from '../hooks/queries/useGroups';
 
 interface RowData {
   [key: string]: any;
@@ -22,24 +22,27 @@ interface SpecializationFormData {
 
 export default function Groups() {
   const { can } = usePermissions();
-  const { 
-    groups, 
-    departments, 
-    isLoading: loading, 
-    error: storeError, 
-    fetchGroups, 
-    fetchDepartments, 
-    addGroup: storeAddGroup,
-    updateGroup: storeUpdateGroup,
-    deleteGroup: storeDeleteGroup,
-    deleteAllGroups: storeDeleteAllGroups
-  } = useGroupsStore();
+  // Queries
+  const { data: groups = [], isLoading: loading, error: storeError } = useGroups();
+  const { data: departments = [] } = useDepartments();
+
+  // Mutations
+  const { mutateAsync: storeAddGroup } = useCreateGroup();
+  const { mutateAsync: updateMutation } = useUpdateGroup();
+  const { mutateAsync: storeDeleteGroup } = useDeleteGroup();
+  const { mutateAsync: storeDeleteAllGroups } = useDeleteAllGroups();
+
+  // Wrapper for update
+  const storeUpdateGroup = async (id: number, data: any) => {
+    return updateMutation({ id, data });
+  };
   const { currentYear } = useAcademicStore();
   const addNotification = useNotificationStore((state) => state.addNotification);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<GroupFormData>({
     name: '',
     year: 'L1',
@@ -189,10 +192,8 @@ export default function Groups() {
     setSortConfig({ key, direction });
   };
 
-  useEffect(() => {
-    fetchGroups();
-    fetchDepartments();
-  }, [fetchGroups, fetchDepartments]);
+  // fetchGroups and fetchDepartments removed (handled by useGroups/useDepartments)
+
 
   const normalizeYear = (year: unknown): string => {
     const normalized = String(year).trim().toUpperCase();
@@ -758,7 +759,7 @@ export default function Groups() {
       </div>
 
       {/* عرض رسالة الخطأ إن وجدت */}
-      {error && (
+      {(error || storeError) && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -767,7 +768,7 @@ export default function Groups() {
               </svg>
             </div>
             <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700">{error || (storeError as any)?.message}</p>
             </div>
           </div>
         </div>

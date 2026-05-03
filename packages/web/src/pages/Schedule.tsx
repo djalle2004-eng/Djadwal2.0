@@ -1,13 +1,15 @@
 import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
 import { useAcademicStore } from '../stores/useAcademicStore';
-import { useScheduleStore } from '../stores/useScheduleStore';
-import { useSandboxStore } from '../stores/useSandboxStore';
-import { useProfessorsStore } from '../stores/useProfessorsStore';
-import { useCoursesStore } from '../stores/useCoursesStore';
-import { useRoomsStore } from '../stores/useRoomsStore';
-import { useGroupsStore } from '../stores/useGroupsStore';
-import { useNotificationStore } from '../stores/useNotificationStore';
 import { useUIStore } from '../stores/useUIStore';
+import { useSandboxStore } from '../stores/useSandboxStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useProfessors } from '../hooks/queries/useProfessors';
+import { useCourses } from '../hooks/queries/useCourses';
+import { useRooms } from '../hooks/queries/useRooms';
+import { useGroups, useDepartments } from '../hooks/queries/useGroups';
+import { useAssignments, useCreateAssignment, useUpdateAssignment, useDeleteAssignment } from '../hooks/queries/useAssignments';
+import { useTimeSlots } from '../hooks/queries/useTimeSlots';
+import { useSchedule } from '../hooks/queries/useSchedule';
 import { printContent } from '../utils/printUtils';
 import { jsPDF } from 'jspdf';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
@@ -155,31 +157,45 @@ interface ScheduleStyleSettings {
 export default function Schedule() {
   const { can } = usePermissions();
 
-  // Stores
-  const { 
-    professors, fetchProfessors 
-  } = useProfessorsStore();
-  const { 
-    courses, fetchCourses 
-  } = useCoursesStore();
-  const { 
-    rooms, fetchRooms 
-  } = useRoomsStore();
-  const { 
-    groups, departments, fetchGroups, fetchDepartments 
-  } = useGroupsStore();
+  // Queries
+  const { data: professors = [], isLoading: isProfessorsLoading } = useProfessors();
+  const { data: courses = [], isLoading: isCoursesLoading } = useCourses();
+  const { data: rooms = [], isLoading: isRoomsLoading } = useRooms();
+  const { data: groups = [], isLoading: isGroupsLoading } = useGroups();
+  const { data: departments = [] } = useDepartments();
+  const { data: dbTimeSlots = [] } = useTimeSlots();
+  
   const { 
     currentYear, currentSemester 
   } = useAcademicStore();
+
+  const activeTimeSlots = useMemo(() => {
+    return dbTimeSlots.length > 0 ? dbTimeSlots : timeSlots;
+  }, [dbTimeSlots]);
+  
+  // Local State for selected specialization
+  const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
+
   const { 
-    assignments: contextAssignments, 
+    data: contextAssignments = [], 
     isLoading: isScheduleLoading, 
-    error: scheduleError, 
-    fetchAssignments, 
-    addAssignment, 
-    updateAssignment, 
-    deleteAssignment 
-  } = useScheduleStore();
+    error: scheduleError 
+  } = useAssignments(
+    currentYear?.year_name, 
+    currentSemester?.semester_name, 
+    selectedSpecialization
+  );
+
+  // Mutations
+  const { mutateAsync: addAssignment } = useCreateAssignment();
+  const { mutateAsync: updateAssignmentMutation } = useUpdateAssignment();
+  const { mutateAsync: deleteAssignment } = useDeleteAssignment();
+
+  // Wrapper for update
+  const updateAssignment = async (id: number, data: any) => {
+    return updateAssignmentMutation({ id, data });
+  };
+
   const {
     isSandboxMode,
     sandboxAssignments,
@@ -207,7 +223,7 @@ export default function Schedule() {
   // Local State
   const [selectedDepartment, setSelectedDepartment] = useState<number>(0);
   const [specializations, setSpecializations] = useState<string[]>([]);
-  const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
+  // selectedSpecialization already declared above
   const [scheduleData, setScheduleData] = useState<ScheduleData>({});
   const [selectedCell, setSelectedCell] = useState<ScheduleCell & { dayIndex: number; timeIndex: number } | null>(null);
   const [isCellModalOpen, setIsCellModalOpen] = useState(false);
@@ -233,6 +249,10 @@ export default function Schedule() {
   // Day/time filters state (used by professors filtering)
   const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
   const [selectedTimeSlotId, setSelectedTimeSlotId] = useState<number | null>(null);
+
+  const isLoading = isProfessorsLoading || isCoursesLoading || isRoomsLoading || isGroupsLoading || isScheduleLoading;
+  const [localIsLoading, setLocalIsLoading] = useState(false);
+  const totalIsLoading = isLoading || localIsLoading;
 
   // Keyboard navigation for professor dropdown
   const professorNavigation = useKeyboardNavigation({
@@ -324,7 +344,7 @@ export default function Schedule() {
     const [_, dayIndexStr, timeIndexStr] = overIdString.split('-');
     const newDayIndex = parseInt(dayIndexStr);
     const newTimeIndex = parseInt(timeIndexStr);
-    const newTimeSlot = timeSlots[newTimeIndex];
+    const newTimeSlot = activeTimeSlots[newTimeIndex];
 
     // Find the assignment
     const assignmentsList = isSandboxMode ? sandboxAssignments : contextAssignments;
@@ -503,45 +523,18 @@ export default function Schedule() {
     return Array.from(uniqueGroups.values());
   }, [groups, selectedSpecialization]);
 
-  // Initial data load
-  useEffect(() => {
-    if (!initialDataLoaded.current) {
-      fetchData();
-      initialDataLoaded.current = true;
-    }
-  }, []);
+    // Update schedule data when assignments change
+    useEffect(() => {
+      const assignmentsToUse = isSandboxMode ? sandboxAssignments : contextAssignments;
+      prepareScheduleData(assignmentsToUse);
+    }, [contextAssignments, sandboxAssignments, isSandboxMode, currentYear, currentSemester, selectedSpecialization, dbTimeSlots]);
 
-  // Update schedule data when assignments change
-  useEffect(() => {
-    const assignmentsToUse = isSandboxMode ? sandboxAssignments : contextAssignments;
-    prepareScheduleData(assignmentsToUse);
-  }, [contextAssignments, sandboxAssignments, isSandboxMode, currentYear, currentSemester, selectedSpecialization]);
-
-  // جلب البيانات من قاعدة البيانات
-  const fetchData = async () => {
-    try {
-      await Promise.all([
-        fetchGroups(),
-        fetchCourses(),
-        fetchProfessors(),
-        fetchRooms(),
-        fetchDepartments(),
-        fetchAssignments()
-      ]);
-
-      // تعيين التخصص الافتراضي إذا كانت هناك تخصصات
-      if (uniqueSpecializations.length > 0 && (!selectedSpecialization || !uniqueSpecializations.includes(selectedSpecialization))) {
-        setSelectedSpecialization(uniqueSpecializations[0]);
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      addNotification({ type: 'error', message: 'خطأ أثناء جلب البيانات' });
-    }
-  };
-
-  // تحويل البيانات من قاعدة البيانات إلى تنسيق جدول الزمن
-  const prepareScheduleData = (assignments: Assignment[]) => {
+    // تحويل البيانات من قاعدة البيانات إلى تنسيق جدول الزمن
+    const prepareScheduleData = (assignments: Assignment[]) => {
     const data: ScheduleData = {};
+
+    // Use dbTimeSlots if available, otherwise fallback to local timeSlots
+    const activeTimeSlots = dbTimeSlots.length > 0 ? dbTimeSlots : timeSlots;
 
     // تصفية التكاليف حسب السنة الدراسية والسداسي
     const yearSemesterFilteredAssignments = assignments.filter(assignment =>
@@ -578,8 +571,8 @@ export default function Schedule() {
         data[dayIndex] = {};
       }
 
-      for (let timeIndex = 0; timeIndex < timeSlots.length; timeIndex++) {
-        const key = `${dayIndex}-${timeSlots[timeIndex].start}-${timeSlots[timeIndex].end}`;
+      for (let timeIndex = 0; timeIndex < activeTimeSlots.length; timeIndex++) {
+        const key = `${dayIndex}-${activeTimeSlots[timeIndex].start}-${activeTimeSlots[timeIndex].end}`;
         const assignmentGroup = groupedAssignments.get(key);
 
         if (assignmentGroup && assignmentGroup.length > 0) {
@@ -1305,7 +1298,7 @@ export default function Schedule() {
 
       // تنظيم البيانات حسب اليوم والوقت
       days.forEach((_, dayIndex) => {
-        timeSlots.forEach((_, timeIndex) => {
+        activeTimeSlots.forEach((_, timeIndex) => {
           // البحث عن الحصص في هذا اليوم وهذا الوقت
           if (scheduleData[dayIndex] && scheduleData[dayIndex][timeIndex]) {
             const cell = scheduleData[dayIndex][timeIndex];
@@ -1401,7 +1394,7 @@ export default function Schedule() {
 
       // Générer les en-têtes de colonnes (créneaux horaires)
       let timeHeaders = '';
-      timeSlots.forEach(slot => {
+      activeTimeSlots.forEach(slot => {
         timeHeaders += `<th class="time-header" style="width: ${cellWidth}px; text-align: center !important; vertical-align: middle !important;">${slot.start} - ${slot.end}</th>`;
       });
 
@@ -1414,7 +1407,7 @@ export default function Schedule() {
           <th class="day-header" style="text-align: center !important; vertical-align: middle !important;">${days[dayIndex].name}</th>`;
 
         // Ajouter les cellules pour chaque créneau horaire
-        timeSlots.forEach((_, timeIndex) => {
+        activeTimeSlots.forEach((_, timeIndex) => {
           const cellData = tableData[dayIndex][timeIndex];
 
           if (cellData && cellData.length > 0) {
@@ -1746,7 +1739,7 @@ export default function Schedule() {
 
       // تنظيم البيانات حسب اليوم والوقت
       days.forEach((_, dayIndex) => {
-        timeSlots.forEach((_, timeIndex) => {
+        activeTimeSlots.forEach((_, timeIndex) => {
           // البحث عن الحصص في هذا اليوم وهذا الوقت
           if (scheduleData[dayIndex] && scheduleData[dayIndex][timeIndex]) {
             const cell = scheduleData[dayIndex][timeIndex];
@@ -1852,7 +1845,7 @@ export default function Schedule() {
 
       // Générer les en-têtes de colonnes (créneaux horaires)
       let timeHeaders = '';
-      timeSlots.forEach(slot => {
+      activeTimeSlots.forEach(slot => {
         timeHeaders += `<th class="time-header" style="width: ${cellWidth}px; text-align: center !important; vertical-align: middle !important;">${slot.start} - ${slot.end}</th>`;
       });
 
@@ -1865,7 +1858,7 @@ export default function Schedule() {
           <th class="day-header" style="text-align: center; vertical-align: middle;">${days[dayIndex].name}</th>`;
 
         // Ajouter les cellules pour chaque créneau horaire
-        timeSlots.forEach((_, timeIndex) => {
+        activeTimeSlots.forEach((_, timeIndex) => {
           const cellData = tableData[dayIndex][timeIndex];
 
           if (cellData && cellData.length > 0) {
@@ -2146,7 +2139,7 @@ export default function Schedule() {
       // تحضير بيانات الجدول بنفس طريقة PDF
       const tableData: any[][] = [];
 
-      timeSlots.forEach((timeSlot) => {
+      activeTimeSlots.forEach((timeSlot) => {
         const rowData: any[] = [];
 
         days.forEach((_, dayIndex) => {
@@ -2198,7 +2191,8 @@ export default function Schedule() {
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       alert('حدث خطأ أثناء التصدير إلى Excel');
-      setIsLoading(false);
+    } finally {
+      setLocalIsLoading(false);
     }
   };
 
@@ -2277,7 +2271,7 @@ export default function Schedule() {
     };
 
     // Trouver la hauteur maximale des cellules pour chaque créneau horaire
-    const maxHeights = Array(timeSlots.length).fill(0);
+    const maxHeights = Array(activeTimeSlots.length).fill(0);
     const assignmentsByDay: GroupedAssignments = {};
 
     // Grouper les affectations par jour
@@ -2290,7 +2284,7 @@ export default function Schedule() {
     });
 
     // Calculer la hauteur maximale pour chaque créneau horaire
-    timeSlots.forEach((timeSlot, timeIndex) => {
+    activeTimeSlots.forEach((timeSlot, timeIndex) => {
       Object.entries(assignmentsByDay).forEach(([day, dayAssignments]) => {
         const matchingAssignments = dayAssignments.filter((a: Assignment) =>
           a.day_of_week === days.findIndex(d => d.name === day) &&
@@ -2336,7 +2330,7 @@ export default function Schedule() {
     y += headerHeight;
 
     // Lignes pour chaque créneau horaire
-    timeSlots.forEach((timeSlot, timeIndex) => {
+    activeTimeSlots.forEach((timeSlot, timeIndex) => {
       const rowHeight = Math.max(maxHeights[timeIndex], 15);
 
       // Dessiner la cellule de l'heure
@@ -2480,7 +2474,7 @@ export default function Schedule() {
   const filteredAssignedProfessors = useMemo(() => {
     try {
       if (!selectedSpecialization || selectedDayId == null || selectedTimeSlotId == null) return [] as Professor[];
-      const slot = timeSlots.find(ts => ts.id === selectedTimeSlotId);
+      const slot = activeTimeSlots.find(ts => ts.id === selectedTimeSlotId);
       if (!slot) return [] as Professor[];
 
       // Groups matching selected specialization
@@ -2658,16 +2652,16 @@ export default function Schedule() {
           <button
             onClick={() => cleanDuplicateAssignments()}
             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md"
-            disabled={isLoading}
+            disabled={totalIsLoading}
           >
-            {isLoading ? 'جاري التنظيف...' : 'تنظيف التكاليف المكررة'}
+            {totalIsLoading ? 'جاري التنظيف...' : 'تنظيف التكاليف المكررة'}
           </button>
 
           {/* Boutons existants */}
           <button
             onClick={() => exportToPDF()}
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
-            disabled={isLoading}
+            disabled={totalIsLoading}
           >
             تصدير PDF
           </button>
@@ -2675,7 +2669,7 @@ export default function Schedule() {
           <button
             onClick={() => exportToExcel()}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md"
-            disabled={isLoading}
+            disabled={totalIsLoading}
           >
             تصدير Excel
           </button>
@@ -2683,7 +2677,7 @@ export default function Schedule() {
           <button
             onClick={() => exportToPDFWithoutTemporaryProfessors()}
             className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md"
-            disabled={isLoading}
+            disabled={totalIsLoading}
           >
             تصدير PDF بدون أسماء مؤقتين
           </button>
@@ -2691,7 +2685,7 @@ export default function Schedule() {
           <button
             onClick={() => setIsAIAssistantOpen(true)}
             className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-            disabled={isLoading}
+            disabled={totalIsLoading}
           >
             <span>🤖</span>
             <span>مساعد الذكاء الاصطناعي</span>
@@ -2763,7 +2757,7 @@ export default function Schedule() {
       }
 
       {
-        isLoading ? (
+        totalIsLoading ? (
           <div className="text-center py-4">جاري التحميل...</div>
         ) : (
           <div>
@@ -2797,8 +2791,8 @@ export default function Schedule() {
                     }}
                   >
                     <option value="">اختر المدة</option>
-                    {timeSlots.map(ts => (
-                      <option key={`slot-${ts.id}`} value={ts.id}>{ts.label}</option>
+                    {activeTimeSlots.map(ts => (
+                      <option key={`slot-${ts.id}`} value={ts.id}>{ts.label || `${ts.start} - ${ts.end}`}</option>
                     ))}
                   </select>
                 </div>
@@ -2908,7 +2902,7 @@ export default function Schedule() {
                     </tr>
                   </thead>
                   <tbody>
-                    {timeSlots.map((slot, timeIndex) => (
+                    {activeTimeSlots.map((slot, timeIndex) => (
                       <tr key={timeIndex}>
                         <td className="border p-2 bg-gray-50 text-center">
                           {slot.start} - {slot.end}
