@@ -2660,24 +2660,31 @@ export default function Schedule() {
           {!isSandboxMode && (
             <button
               onClick={enterSandboxMode}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center"
+              className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md flex items-center shadow-sm"
             >
-              <svg className="ml-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
+              <span className="ml-2">🧪</span>
               وضع التجربة
             </button>
           )}
-          {/* Bouton de nettoyage des doublons */}
+
           <button
-            onClick={() => cleanDuplicateAssignments()}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md"
+            onClick={() => setIsSchedulerOpen(true)}
+            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 shadow-lg transition-all transform hover:scale-105 font-bold"
             disabled={totalIsLoading}
           >
-            {totalIsLoading ? 'جاري التنظيف...' : 'تنظيف التكاليف المكررة'}
+            <span className="text-xl">⚡</span>
+            <span>توليد الجدول تلقائياً</span>
           </button>
 
-          {/* Boutons existants */}
+          <button
+            onClick={() => cleanDuplicateAssignments()}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md flex items-center"
+            disabled={totalIsLoading}
+          >
+            <span className="ml-2">🧹</span>
+            {totalIsLoading ? 'جاري التنظيف...' : 'تنظيف التكرار'}
+          </button>
+
           <button
             onClick={() => exportToPDF()}
             className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
@@ -2695,31 +2702,12 @@ export default function Schedule() {
           </button>
 
           <button
-            onClick={() => exportToPDFWithoutTemporaryProfessors()}
-            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-md"
-            disabled={totalIsLoading}
-          >
-            تصدير PDF بدون أسماء مؤقتين
-          </button>
-
-
-
-          <button
-            onClick={() => setIsSchedulerOpen(true)}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 shadow-lg transition-all transform hover:scale-105"
-            disabled={totalIsLoading}
-          >
-            <span className="text-xl">⚡</span>
-            <span className="font-bold">التوليد الذكي</span>
-          </button>
-
-          <button
             onClick={() => setIsAIAssistantOpen(true)}
-            className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+            className="bg-purple-100 text-purple-700 hover:bg-purple-200 px-4 py-2 rounded-md flex items-center space-x-2"
             disabled={totalIsLoading}
           >
             <span>🤖</span>
-            <span>مساعد الذكاء الاصطناعي</span>
+            <span>مساعد الذكاء</span>
           </button>
         </div>
       </div>
@@ -2774,20 +2762,27 @@ export default function Schedule() {
         </div>
 
         {/* أزرار العمليات */}
-        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-3">
-          <button
-            onClick={() => setIsSchedulerOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg flex items-center shadow-md transition-all transform hover:scale-105"
-            disabled={totalIsLoading || !selectedSpecialization}
-            title={!selectedSpecialization ? 'يرجى اختيار تخصص أولاً' : 'توليد الجدول تلقائياً لهذا التخصص'}
-          >
-            <span className="ml-2 text-xl">⚙️</span>
-            <span className="font-bold">توليد الجدول تلقائياً</span>
-          </button>
-
+        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-center">
+          {selectedSpecialization && (
+            <div className="flex-1 flex items-center bg-purple-50 p-3 rounded-xl border border-purple-100 animate-pulse-subtle">
+              <span className="text-2xl ml-3">✨</span>
+              <div className="flex-1">
+                <p className="text-purple-900 font-bold text-sm">توليد جدول ذكي لهذا التخصص؟</p>
+                <p className="text-purple-700 text-xs">سيقوم الذكاء الاصطناعي بتوزيع الحصص بدون تعارضات.</p>
+              </div>
+              <button
+                onClick={() => setIsSchedulerOpen(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold shadow-md transition-all whitespace-nowrap"
+                disabled={totalIsLoading}
+              >
+                بدء التوليد التلقائي
+              </button>
+            </div>
+          )}
+          
           <button
             onClick={() => cleanDuplicateAssignments()}
-            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg flex items-center transition-colors"
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg flex items-center transition-colors"
             disabled={totalIsLoading}
           >
             <span className="ml-2">🧹</span>
