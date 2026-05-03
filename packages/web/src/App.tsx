@@ -29,6 +29,7 @@ import UsersPage from './pages/Users';
 import BackupRestore from './pages/BackupRestore';
 import AuditLog from './pages/AuditLog';
 import DatabaseSettings from './pages/DatabaseSettings';
+import Notifications from "./components/Notifications";
 
 
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -62,9 +63,17 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+import { useAuthStore, useIsAdmin } from "./stores/useAuthStore";
+import { useAcademicStore } from "./stores/useAcademicStore";
+import { useUIStore } from "./stores/useUIStore";
+import { useNotificationStore } from "./stores/useNotificationStore";
+
 const Layout = ({ children }: LayoutProps) => {
-  const { user, signOut } = UserAuth();
-  const { theme, toggleTheme } = useTheme();
+  const user = useAuthStore((state) => state.user);
+  const signOut = useAuthStore((state) => state.signOut);
+  const isAdmin = useIsAdmin();
+  const { theme, setTheme } = useUIStore();
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   const { isSandboxMode, hasChanges } = useSandbox();
 
   // Warn on browser close/refresh
@@ -110,42 +119,46 @@ const Layout = ({ children }: LayoutProps) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="flex">
-        <Sidebar navigation={navigation} />
-        <div className="flex-1 flex flex-col">
-          {/* Header Bar */}
-          <header className="bg-white border-b border-gray-200 px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3 space-x-reverse">
-                <User className="h-5 w-5 text-gray-500" />
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {user?.full_name || user?.username || 'مستخدم'}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {user?.role === 'admin' ? 'مدير النظام' : user?.role || 'مستخدم'}
-                  </p>
+    <div className={theme === 'dark' ? 'dark' : ''}>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+        <div className="flex">
+          <Sidebar navigation={navigation} />
+          <div className="flex-1 flex flex-col">
+            {/* Header Bar */}
+            <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 py-4 shadow-sm transition-colors duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3 space-x-reverse">
+                  <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-full">
+                    <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">
+                      {user?.full_name || user?.username || 'مستخدم'}
+                    </p>
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                      {isAdmin ? 'مدير النظام' : user?.role || 'مستخدم'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <button
+                    onClick={toggleTheme}
+                    className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-all duration-200 transform hover:scale-110"
+                    title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
+                  >
+                    {theme === 'dark' ? <Sun className="h-5 w-5 text-yellow-400" /> : <Moon className="h-5 w-5" />}
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-2 space-x-reverse px-4 py-2 text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 rounded-lg transition-all duration-200 border border-transparent hover:border-red-600"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>تسجيل الخروج</span>
+                  </button>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <button
-                onClick={toggleTheme}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors dark:text-gray-400 dark:hover:bg-gray-700"
-                title={theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}
-              >
-                {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="flex items-center space-x-2 space-x-reverse px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>تسجيل الخروج</span>
-              </button>
-            </div>
-          </header>
+            </header>
 
           {/* Main Content */}
           <main className="flex-1 p-8">
@@ -348,12 +361,19 @@ const routes = [
 const router = createBrowserRouter(routes);
 
 function App() {
+  const loadActiveSettings = useAcademicStore((state) => state.loadActiveSettings);
+
+  useEffect(() => {
+    loadActiveSettings();
+  }, [loadActiveSettings]);
+
   return (
     <AcademicYearProvider>
       <AssignmentProvider>
         <SandboxProvider>
           <ThemeProvider>
             <RouterProvider router={router} />
+            <Notifications />
           </ThemeProvider>
         </SandboxProvider>
       </AssignmentProvider>

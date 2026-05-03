@@ -1,10 +1,15 @@
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore, useIsAdmin, useIsProfessor, useIsScheduleManager, usePermissions as useStorePermissions } from '../stores/useAuthStore';
 
 /**
  * خطاف للتحقق من الصلاحيات
  */
 export const usePermissions = () => {
-  const { user, hasPermission, isAdmin, isScheduleManager, isStaff, isProfessor } = useAuth();
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = useIsAdmin();
+  const isProfessor = useIsProfessor();
+  const isScheduleManager = useIsScheduleManager();
+  const hasPermission = useStorePermissions();
+  const isStaff = user?.role === 'staff';
   
   /**
    * التحقق من صلاحية معينة

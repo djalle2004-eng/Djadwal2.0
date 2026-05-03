@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { UserAuth } from '../context/AuthContext';
+import { useAuthStore } from '../stores/useAuthStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user } = UserAuth();
+  const user = useAuthStore((state) => state.user);
   const location = useLocation();
 
   useEffect(() => {

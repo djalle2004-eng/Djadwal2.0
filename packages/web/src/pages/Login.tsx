@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../stores/useAuthStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import {
   Box,
   TextField,
@@ -50,9 +51,13 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, user } = useAuth();
+  
+  const user = useAuthStore((state) => state.user);
+  const signIn = useAuthStore((state) => state.signIn);
+  const loading = useAuthStore((state) => state.isLoading);
+  const addNotification = useNotificationStore((state) => state.addNotification);
+  
   const navigate = useNavigate();
 
   // التحقق من إعدادات قاعدة البيانات
