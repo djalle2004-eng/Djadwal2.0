@@ -830,6 +830,36 @@ export default function Schedule() {
     }
   };
 
+  const handleOpenLoadDraftModal = async () => {
+    try {
+      setIsLoading(true);
+      const drafts = await listDrafts();
+      setSavedDrafts(drafts);
+      setIsLoadDraftModalOpen(true);
+    } catch (error) {
+      console.error('Error listing drafts:', error);
+      alert('حدث خطأ أثناء تحميل قائمة المسودات');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteDraft = async (id: number) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه المسودة؟')) return;
+    try {
+      setIsLoading(true);
+      await deleteDraft(id);
+      // Refresh list
+      const drafts = await listDrafts();
+      setSavedDrafts(drafts);
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      alert('حدث خطأ أثناء حذف المسودة');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // حذف خلية من الجدول
   const handleDeleteCell = async (dayIndex: number, timeIndex: number) => {
     try {
@@ -2551,65 +2581,6 @@ export default function Schedule() {
     }
   }, [contextAssignments, selectedSpecialization, selectedDayId, selectedTimeSlotId, currentYear, currentSemester, groups, professors]);
 
-  // Sandbox Save/Load Handlers
-  const handleSaveDraft = async () => {
-    try {
-      setIsLoading(true);
-      await saveDraft(draftName || `مسودة ${new Date().toLocaleString('ar-EG')}`);
-      setIsSaveDraftModalOpen(false);
-      setDraftName('');
-      alert('تم حفظ المسودة بنجاح');
-    } catch (error) {
-      console.error('Error saving draft:', error);
-      alert('حدث خطأ أثناء حفظ المسودة');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleOpenLoadDraftModal = async () => {
-    try {
-      setIsLoading(true);
-      const drafts = await listDrafts();
-      setSavedDrafts(drafts);
-      setIsLoadDraftModalOpen(true);
-    } catch (error) {
-      console.error('Error listing drafts:', error);
-      alert('حدث خطأ أثناء تحميل قائمة المسودات');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLoadDraft = async (id: number) => {
-    try {
-      setIsLoading(true);
-      await loadDraft(id);
-      setIsLoadDraftModalOpen(false);
-      alert('تم تحميل المسودة بنجاح');
-    } catch (error) {
-      console.error('Error loading draft:', error);
-      alert('حدث خطأ أثناء تحميل المسودة');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeleteDraft = async (id: number) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذه المسودة؟')) return;
-    try {
-      setIsLoading(true);
-      await deleteDraft(id);
-      // Refresh list
-      const drafts = await listDrafts();
-      setSavedDrafts(drafts);
-    } catch (error) {
-      console.error('Error deleting draft:', error);
-      alert('حدث خطأ أثناء حذف المسودة');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="container mx-auto p-4">

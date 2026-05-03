@@ -44,7 +44,7 @@ export default function AcademicYears() {
   };
   const addNotification = useNotificationStore((state) => state.addNotification);
 
-  const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
+
   const [newYearName, setNewYearName] = useState('');
   const [newSemesterName, setNewSemesterName] = useState('');
   const [newSemesterStartDate, setNewSemesterStartDate] = useState('');

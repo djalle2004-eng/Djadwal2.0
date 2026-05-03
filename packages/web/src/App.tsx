@@ -165,6 +165,7 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </div>
     </div>
+    </div>
   );
 };
 

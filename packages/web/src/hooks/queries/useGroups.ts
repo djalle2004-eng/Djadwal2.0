@@ -120,3 +120,32 @@ export const useDeleteGroup = () => {
     },
   });
 };
+
+export const useDeleteAllGroups = () => {
+  const queryClient = useQueryClient();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  return useMutation({
+    mutationFn: groupsApi.deleteAll,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: GROUPS_QUERY_KEY });
+      const previousGroups = queryClient.getQueryData<Group[]>(GROUPS_QUERY_KEY);
+
+      if (previousGroups) {
+        queryClient.setQueryData<Group[]>(GROUPS_QUERY_KEY, []);
+      }
+      return { previousGroups };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousGroups) {
+        queryClient.setQueryData(GROUPS_QUERY_KEY, context.previousGroups);
+      }
+    },
+    onSuccess: () => {
+      addNotification({ type: 'success', message: 'تم حذف جميع الأفواج بنجاح' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: GROUPS_QUERY_KEY });
+    },
+  });
+};

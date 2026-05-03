@@ -117,11 +117,6 @@ export default function GroupSchedules() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // فلاتر التخصص والمجموعة
-  const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
   // حالة التحرير
   const [editingCell, setEditingCell] = useState<{ day: number, timeSlot: number } | null>(null);

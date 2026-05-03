@@ -257,8 +257,6 @@ export default function AvailableRooms() {
   const [roomAvailabilityStatus, setRoomAvailabilityStatus] = useState<{ [key: string]: boolean }>({});
   const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
 
-  // Récupération du contexte d'année académique
-  const { currentYear, currentSemester } = useAcademicYear();
 
   // États pour la recherche de professeurs et cours
   const [professorSearchTerm, setProfessorSearchTerm] = useState('');
