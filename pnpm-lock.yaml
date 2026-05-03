@@ -161,10 +161,23 @@ importers:
         specifier: ~5.9.2
         version: 5.9.3
 
+  packages/scheduler:
+    dependencies:
+      '@djadwal/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.5.3
+        version: 5.9.3
+
   packages/shared: {}
 
   packages/web:
     dependencies:
+      '@djadwal/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@djadwal/shared':
         specifier: workspace:*
         version: link:../shared
