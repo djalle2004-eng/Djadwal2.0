@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
 import { useAcademicStore } from '../stores/useAcademicStore';
 import { useUIStore } from '../stores/useUIStore';
@@ -261,9 +262,9 @@ export default function Schedule() {
   const schedulerInput: SchedulerInput = {
     professors,
     courses,
-    rooms,
+    rooms: rooms as any,
     groups,
-    assignments: contextAssignments,
+    assignments: contextAssignments as any,
     academicYear: currentYear!,
     semester: currentSemester!,
     constraints: {
@@ -307,33 +308,33 @@ export default function Schedule() {
   const professorNavigation = useKeyboardNavigation({
     items: filteredProfessors,
     isOpen: isProfessorDropdownOpen,
-    onSelect: (professor) => {
+    onSelect: (professor: Professor) => {
       handleProfessorSelect(professor.id);
     },
     onClose: () => setIsProfessorDropdownOpen(false),
-    getItemId: (professor, index) => `schedule-professor-${professor?.id || 0}-${index}`
+    getItemId: (professor: Professor, index: number) => `schedule-professor-${professor?.id || 0}-${index}`
   });
 
   // Keyboard navigation for course dropdown
   const courseNavigation = useKeyboardNavigation({
     items: filteredCoursesSearch,
     isOpen: isCourseDropdownOpen,
-    onSelect: (course) => {
+    onSelect: (course: Course) => {
       handleCourseSelect(course.id);
     },
     onClose: () => setIsCourseDropdownOpen(false),
-    getItemId: (course, index) => `schedule-course-${course?.id || 0}-${index}`
+    getItemId: (course: Course, index: number) => `schedule-course-${course?.id || 0}-${index}`
   });
 
   // Keyboard navigation for room dropdown
   const roomNavigation = useKeyboardNavigation({
     items: filteredRooms,
     isOpen: isRoomDropdownOpen,
-    onSelect: (room) => {
+    onSelect: (room: Room) => {
       handleRoomSelect(room.id);
     },
     onClose: () => setIsRoomDropdownOpen(false),
-    getItemId: (room, index) => `schedule-room-${room?.id || 0}-${index}`
+    getItemId: (room: Room, index: number) => `schedule-room-${room?.id || 0}-${index}`
   });
 
   // إعدادات تصميم الجدول
@@ -510,6 +511,12 @@ export default function Schedule() {
   // Use ref to track if initial data has been loaded
   const initialDataLoaded = useRef(false);
   const lastUpdateTimestamp = useRef(Date.now());
+
+  // تصفية الأفواج بناءً على القسم المختار
+  const filteredGroups = useMemo(() => {
+    if (!selectedDepartment) return groups;
+    return groups.filter((group: any) => group.department_id === selectedDepartment);
+  }, [groups, selectedDepartment]);
 
   // استخراج قائمة التخصصات الفريقة من المجموعات
   const uniqueSpecializations = useMemo(() => {
@@ -832,42 +839,42 @@ export default function Schedule() {
 
   const handleOpenLoadDraftModal = async () => {
     try {
-      setIsLoading(true);
-      const drafts = await listDrafts();
+      setLocalIsLoading(true);
+      const drafts = await window.db.listSandboxDrafts();
       setSavedDrafts(drafts);
       setIsLoadDraftModalOpen(true);
     } catch (error) {
       console.error('Error listing drafts:', error);
       alert('حدث خطأ أثناء تحميل قائمة المسودات');
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
   const handleDeleteDraft = async (id: number) => {
     if (!window.confirm('هل أنت متأكد من حذف هذه المسودة؟')) return;
     try {
-      setIsLoading(true);
-      await deleteDraft(id);
+      setLocalIsLoading(true);
+      await window.db.deleteSandboxDraft(id);
       // Refresh list
-      const drafts = await listDrafts();
+      const drafts = await window.db.listSandboxDrafts();
       setSavedDrafts(drafts);
     } catch (error) {
       console.error('Error deleting draft:', error);
       alert('حدث خطأ أثناء حذف المسودة');
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
   // حذف خلية من الجدول
   const handleDeleteCell = async (dayIndex: number, timeIndex: number) => {
     try {
-      setIsLoading(true);
-      setError(null);
+      setLocalIsLoading(true);
+      // setError(null); // No local error state for now
 
       if (!window.confirm("هل أنت متأكد من حذف هذا التكليف؟")) {
-        setIsLoading(false);
+        setLocalIsLoading(false);
         return;
       }
 
@@ -875,7 +882,7 @@ export default function Schedule() {
       const cellData = scheduleData[dayIndex]?.[timeIndex];
       if (!cellData) {
         console.log("لا توجد بيانات في هذه الخلية");
-        setIsLoading(false);
+        setLocalIsLoading(false);
         return;
       }
 
@@ -933,7 +940,7 @@ export default function Schedule() {
       console.error("Error deleting cell:", error);
       setError(error instanceof Error ? error : new Error("خطأ أثناء حذف التكليف"));
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
@@ -1354,10 +1361,10 @@ export default function Schedule() {
   const exportToPDF = async () => {
     try {
       // إظهار رسالة تحميل
-      setIsLoading(true);
+      setLocalIsLoading(true);
 
       if (!currentYear || !currentSemester) {
-        setIsLoading(false);
+        setLocalIsLoading(false);
         return;
       }
 
@@ -1782,11 +1789,11 @@ export default function Schedule() {
       );
       printContent(htmlContent, printOptions);
 
-      setIsLoading(false);
+      setLocalIsLoading(false);
     } catch (error) {
       console.error('Error exporting to PDF:', error);
       setError(error instanceof Error ? error : new Error(String(error)));
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
@@ -1794,11 +1801,11 @@ export default function Schedule() {
   const exportToPDFWithoutTemporaryProfessors = async () => {
     try {
       // إظهار رسالة تحميل
-      setIsLoading(true);
+      setLocalIsLoading(true);
 
       if (!currentYear || !currentSemester) {
         alert('الرجاء اختيار السنة الدراسية والفصل الدراسي');
-        setIsLoading(false);
+        setLocalIsLoading(false);
         return;
       }
 
@@ -2196,22 +2203,22 @@ export default function Schedule() {
         asPDF: true
       });
 
-      setIsLoading(false);
+      setLocalIsLoading(false);
     } catch (error) {
       console.error('Error exporting to PDF without temporary professors:', error);
       setError(error instanceof Error ? error : new Error(String(error)));
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
   // دالة تصدير الجدول إلى Excel باستخدام ExcelJS
   const exportToExcel = async () => {
     try {
-      setIsLoading(true);
+      setLocalIsLoading(true);
 
       if (!currentYear || !currentSemester) {
         alert('الرجاء اختيار السنة الدراسية والفصل الدراسي');
-        setIsLoading(false);
+        setLocalIsLoading(false);
         return;
       }
 
@@ -2266,7 +2273,7 @@ export default function Schedule() {
         printSettingsHook
       );
 
-      setIsLoading(false);
+      setLocalIsLoading(false);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       alert('حدث خطأ أثناء التصدير إلى Excel');
@@ -2481,7 +2488,7 @@ export default function Schedule() {
   // Fonction pour nettoyer les doublons
   const cleanDuplicateAssignments = async () => {
     try {
-      setIsLoading(true);
+      setLocalIsLoading(true);
       setError(null);
 
       // Récupérer toutes les affectations
@@ -2545,7 +2552,7 @@ export default function Schedule() {
       console.error('خطأ في تنظيف التكاليف المكررة:', error);
       setError(error instanceof Error ? error : new Error('خطأ غير معروف'));
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
@@ -2810,8 +2817,8 @@ export default function Schedule() {
 
 
       {
-        error && (
-          <DatabaseErrorAlert error={error} onRetry={() => fetchData()} />
+        scheduleError && (
+          <DatabaseErrorAlert error={scheduleError} onRetry={() => window.location.reload()} />
         )
       }
 
