@@ -3,7 +3,7 @@ services:
     name: djadwal
     env: node
     plan: free
-    buildCommand: pnpm install && pnpm --filter @djadwal/web build --logLevel info
+    buildCommand: pnpm install --frozen-lockfile
     startCommand: pnpm run start:api
     envVars:
       - key: NODE_VERSION

@@ -11,12 +11,15 @@ lerna-debug.log*
 node_modules
 
 # Build outputs
-dist
+/dist
 dist-ssr
 dist-electron
 out
 build
 *.local
+
+# Allow web dist to be committed (Render free tier can't build it - OOM)
+!packages/web/dist
 
 # Environment variables (CRITICAL - Contains sensitive data)
 .env
