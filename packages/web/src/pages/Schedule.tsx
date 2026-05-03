@@ -2654,7 +2654,9 @@ export default function Schedule() {
         </div>
       )}
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">جدول المحاضرات</h1>
+        <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
+          جدول المحاضرات الذكي (النسخة الجديدة 2.5)
+        </h1>
 
         <div className="flex space-x-2">
           {!isSandboxMode && (
