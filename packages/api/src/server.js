@@ -7,10 +7,14 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 
+const { initDatabaseConnection } = require('./database');
+
 // Configuration du serveur
 const app = express();
 const port = process.env.PORT || 3001;
 const upload = multer();
+
+initDatabaseConnection().catch(console.error);
 
 const apiRoutes = require('./routes');
 
@@ -103,11 +107,11 @@ app.get('/api/status', (req, res) => {
 });
 
 // Serve static files from the React frontend app
-app.use(express.static(path.join(__dirname, '../dist')));
+app.use(express.static(path.join(__dirname, '../../web/dist')));
 
 // Anything that doesn't match the above, send back index.html
 app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+  res.sendFile(path.join(__dirname, '../../web/dist/index.html'));
 });
 
 // Démarrage du serveur

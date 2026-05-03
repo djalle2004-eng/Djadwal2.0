@@ -1,0 +1,11 @@
+{
+  "name": "@djadwal/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/main.js",
+  "dependencies": {
+    "@djadwal/shared": "workspace:*",
+    "electron-is-dev": "^3.0.1",
+    "electron-store": "^10.0.1"
+  }
+}
