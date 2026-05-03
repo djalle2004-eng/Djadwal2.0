@@ -20,6 +20,8 @@ import { exportScheduleToExcel } from '../utils/excelUtils';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor, closestCorners, DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { DraggableAssignment } from '../components/schedule/DraggableAssignment';
 import { DroppableCell } from '../components/schedule/DroppableCell';
+import { SchedulerModal } from '../components/SchedulerModal';
+import { SchedulerInput, SchedulerResult } from '@djadwal/scheduler';
 
 // تعريف الخطوط العربية
 // const arabicFontConfig = {
@@ -228,6 +230,53 @@ export default function Schedule() {
   const [selectedCell, setSelectedCell] = useState<ScheduleCell & { dayIndex: number; timeIndex: number } | null>(null);
   const [isCellModalOpen, setIsCellModalOpen] = useState(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
+
+  const handleApplyScheduler = async (result: SchedulerResult) => {
+    try {
+      setLocalIsLoading(true);
+      // 1. Delete existing assignments for this year/semester/specialization
+      for (const a of contextAssignments) {
+        await deleteAssignment(a.id!);
+      }
+
+      // 2. Add generated assignments
+      for (const s of result.sessions) {
+        await addAssignment({
+          ...s,
+          academic_year: currentYear?.year_name,
+          semester: currentSemester?.semester_name
+        });
+      }
+
+      addNotification({ type: 'success', message: 'تم تطبيق الجدول المولد بنجاح' });
+      setIsSchedulerOpen(false);
+    } catch (err) {
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء تطبيق الجدول' });
+    } finally {
+      setLocalIsLoading(false);
+    }
+  };
+
+  const schedulerInput: SchedulerInput = {
+    professors,
+    courses,
+    rooms,
+    groups,
+    assignments: contextAssignments,
+    academicYear: currentYear!,
+    semester: currentSemester!,
+    constraints: {
+      weights: {
+        professorPreferences: 10,
+        idleGaps: 5,
+        commuteTime: 3,
+        distribution: 5,
+        afternoonSessions: 2,
+        roomChanges: 2
+      }
+    }
+  };
 
   // Search states
   const [professorSearchTerm, setProfessorSearchTerm] = useState('');
@@ -2683,6 +2732,15 @@ export default function Schedule() {
           </button>
 
           <button
+            onClick={() => setIsSchedulerOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+            disabled={totalIsLoading}
+          >
+            <span>⚙️</span>
+            <span>توليد تلقائي</span>
+          </button>
+
+          <button
             onClick={() => setIsAIAssistantOpen(true)}
             className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center space-x-2"
             disabled={totalIsLoading}
@@ -3099,7 +3157,13 @@ export default function Schedule() {
         )
       }
 
-      {/* AI Assistant Modal */}
+      <SchedulerModal 
+        open={isSchedulerOpen}
+        onClose={() => setIsSchedulerOpen(false)}
+        onApply={handleApplyScheduler}
+        input={schedulerInput}
+      />
+      
       <AIAssistant
         isOpen={isAIAssistantOpen}
         onClose={() => setIsAIAssistantOpen(false)}

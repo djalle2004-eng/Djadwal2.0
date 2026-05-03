@@ -1,0 +1,12 @@
+{
+  "name": "@djadwal/scheduler",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/ScheduleGenerator.ts",
+  "dependencies": {
+    "@djadwal/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}
