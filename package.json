@@ -12,6 +12,14 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "typescript": "^5.5.3",
-    "eslint": "^9.9.1"
+    "eslint": "^9.9.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^18.3.12",
+      "@types/react-dom": "^18.3.1"
+    }
   }
 }
