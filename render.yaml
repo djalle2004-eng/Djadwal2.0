@@ -6,6 +6,8 @@ services:
     buildCommand: pnpm install && pnpm run build
     startCommand: pnpm run start:api
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: NODE_OPTIONS
         value: "--max_old_space_size=4096"
       - key: TURSO_DATABASE_URL

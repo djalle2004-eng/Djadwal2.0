@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "echo '--- Running TSC ---' && tsc --noEmit && echo '--- Running Vite Build ---' && vite build",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -52,6 +53,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.5.3",
     "vite": "^5.0.12",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite-plugin-pwa": "^0.21.1"
   }
 }
