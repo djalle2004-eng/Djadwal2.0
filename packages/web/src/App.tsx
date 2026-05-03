@@ -117,6 +117,11 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* FORCE UPDATE BANNER */}
+      <div className="bg-red-600 text-white text-center py-1 text-xs font-bold animate-pulse">
+        🚀 النسخة الذكية v2.5 مفعلة - إذا رأيت هذا الشريط فأنت تشاهد التحديث الجديد
+      </div>
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
         <div className="flex">
           <Sidebar navigation={navigation} />
