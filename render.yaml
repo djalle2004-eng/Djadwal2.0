@@ -9,7 +9,7 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: NODE_OPTIONS
-        value: "--max_old_space_size=4096"
+        value: "--max-old-space-size=400"
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN

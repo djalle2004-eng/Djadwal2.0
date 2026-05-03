@@ -2,33 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [
     react(),
-    // VitePWA({
-    //   registerType: 'autoUpdate',
-    //   includeAssets: ['icon.ico'],
-    //   manifest: {
-    //     name: 'Djadwal',
-    //     short_name: 'Djadwal',
-    //     description: 'Application de gestion des emplois du temps',
-    //     theme_color: '#ffffff',
-    //     icons: [
-    //       {
-    //         src: 'icon.ico',
-    //         sizes: '64x64 32x32 24x24 16x16',
-    //         type: 'image/x-icon'
-    //       }
-    //     ]
-    //   }
-    // })
   ],
-  base: './', // Utiliser des chemins relatifs au lieu de chemins absolus
+  base: './',
   resolve: {
     alias: {
-      '@': './src',
-      '@djadwal/shared': '../shared/src',
+      '@': path.resolve(__dirname, './src'),
+      '@djadwal/shared': path.resolve(__dirname, '../shared/src'),
     },
   },
   server: {
