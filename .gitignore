@@ -18,8 +18,9 @@ out
 build
 *.local
 
-# Allow web dist to be committed (Render free tier can't build it - OOM)
+# Allow pre-built dist to be committed (Render free tier can't build - OOM)
 !packages/web/dist
+!packages/database/dist
 
 # Environment variables (CRITICAL - Contains sensitive data)
 .env

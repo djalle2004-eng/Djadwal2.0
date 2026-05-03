@@ -2,8 +2,9 @@
   "name": "@djadwal/database",
   "version": "1.0.0",
   "private": true,
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "scripts": {
+    "build": "tsc",
     "db:migrate": "ts-node --transpile-only scripts/db.ts migrate",
     "db:rollback": "ts-node --transpile-only scripts/db.ts rollback",
     "db:status": "ts-node --transpile-only scripts/db.ts status"
