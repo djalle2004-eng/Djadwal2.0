@@ -2734,6 +2734,15 @@ export default function Schedule() {
 
 
           <button
+            onClick={() => setIsSchedulerOpen(true)}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 shadow-lg transition-all transform hover:scale-105"
+            disabled={totalIsLoading}
+          >
+            <span className="text-xl">⚡</span>
+            <span className="font-bold">التوليد الذكي</span>
+          </button>
+
+          <button
             onClick={() => setIsAIAssistantOpen(true)}
             className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center space-x-2"
             disabled={totalIsLoading}
@@ -2822,7 +2831,7 @@ export default function Schedule() {
             جدول محاضرات {selectedSpecialization || 'جميع التخصصات'} | {getSelectedSemesterName()} | السنة الجامعية {currentYear?.year_name || 'غير محدد'}
           </h2>
         </div>
-      </div>
+
 
       {
         error && (
