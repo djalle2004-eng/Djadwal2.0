@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
-import { VitePWA } from 'vite-plugin-pwa';
+import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -47,19 +46,7 @@ export default defineConfig({
     assetsDir: 'assets',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          mui: ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-date-pickers'],
-          aggrid: ['ag-grid-community', 'ag-grid-react'],
-          pdf: ['jspdf', 'jspdf-autotable', 'pdf-lib', '@react-pdf/renderer', 'html2pdf.js'],
-          utils: ['axios', 'date-fns', 'exceljs', 'xlsx', 'lucide-react']
-        },
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith('.svg')) {
-            return 'assets/images/[name][extname]';
-          }
-          return 'assets/[name]-[hash][extname]';
-        },
+        // Simplification pour Render
       },
       onwarn(warning, warn) {
         if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
