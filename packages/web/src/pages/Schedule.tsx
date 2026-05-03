@@ -46,7 +46,7 @@ interface Professor {
   id: number;
   name: string;
   email: string;
-  Title?: string;
+  title?: string;
 }
 
 interface Course {
@@ -507,7 +507,7 @@ export default function Schedule() {
 
   // Helper function to check if a professor is temporary
   const isProfessorTemporary = (professor: Professor) => {
-    return professor.Title === 'أستاذ(ة) مؤقت(ة)';
+    return professor.title === 'أستاذ(ة) مؤقت(ة)';
   };
 
   // Use ref to track if initial data has been loaded
@@ -1258,7 +1258,7 @@ export default function Schedule() {
                   {group && <div className="font-bold">{group.name}</div>}
                   {course && <div>{course.name}</div>}
                   {professor && (
-                    <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                    <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                       {professor.name}
                     </div>
                   )}
@@ -1270,7 +1270,7 @@ export default function Schedule() {
                 {group && <div className="font-bold">{group.name}</div>}
                 {course && <div>{course.name}</div>}
                 {professor && (
-                  <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                  <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                     {professor.name}
                   </div>
                 )}
