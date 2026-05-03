@@ -3,11 +3,11 @@ services:
     name: djadwal
     env: node
     plan: free
-    buildCommand: pnpm install && pnpm run build
+    buildCommand: pnpm install && pnpm --filter @djadwal/web build --logLevel info
     startCommand: pnpm run start:api
     envVars:
       - key: NODE_VERSION
-        value: "22"
+        value: "20"
       - key: NODE_OPTIONS
         value: "--max_old_space_size=4096"
       - key: TURSO_DATABASE_URL

@@ -27,8 +27,8 @@ export default defineConfig({
   base: './', // Utiliser des chemins relatifs au lieu de chemins absolus
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@djadwal/shared': path.resolve(__dirname, '../shared/src'),
+      '@': './src',
+      '@djadwal/shared': '../shared/src',
     },
   },
   server: {
