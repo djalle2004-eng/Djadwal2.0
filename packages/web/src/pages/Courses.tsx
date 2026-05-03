@@ -232,9 +232,6 @@ export default function Courses() {
           console.error('Error importing course:', err);
         }
       }
-
-      }
-
       addNotification({ type: 'success', message: `تم استيراد ${importedCount} مادة بنجاح` });
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(0), 2000);

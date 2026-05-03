@@ -7,7 +7,7 @@ import { useNotificationStore } from '../stores/useNotificationStore';
 interface Room {
   id: number;
   name: string;
-  capacity: number;
+  capacity?: number;
 }
 
 interface RoomFormData {
@@ -22,7 +22,7 @@ interface FormErrors {
 
 export default function Rooms() {
   const { can } = usePermissions();
-  const { data: rooms = [], isLoading: loading, error: storeError } = useRooms();
+  const { data: rooms = [], isLoading: loading, error } = useRooms();
   const { mutateAsync: storeAddRoom } = useCreateRoom();
   const { mutateAsync: updateMutation } = useUpdateRoom();
   const { mutateAsync: storeDeleteRoom } = useDeleteRoom();
