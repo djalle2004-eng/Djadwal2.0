@@ -2731,14 +2731,7 @@ export default function Schedule() {
             تصدير PDF بدون أسماء مؤقتين
           </button>
 
-          <button
-            onClick={() => setIsSchedulerOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md flex items-center space-x-2"
-            disabled={totalIsLoading}
-          >
-            <span>⚙️</span>
-            <span>توليد تلقائي</span>
-          </button>
+
 
           <button
             onClick={() => setIsAIAssistantOpen(true)}
@@ -2799,6 +2792,29 @@ export default function Schedule() {
             </select>
           </div>
         </div>
+
+        {/* أزرار العمليات */}
+        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-wrap gap-3">
+          <button
+            onClick={() => setIsSchedulerOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg flex items-center shadow-md transition-all transform hover:scale-105"
+            disabled={totalIsLoading || !selectedSpecialization}
+            title={!selectedSpecialization ? 'يرجى اختيار تخصص أولاً' : 'توليد الجدول تلقائياً لهذا التخصص'}
+          >
+            <span className="ml-2 text-xl">⚙️</span>
+            <span className="font-bold">توليد الجدول تلقائياً</span>
+          </button>
+
+          <button
+            onClick={() => cleanDuplicateAssignments()}
+            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg flex items-center transition-colors"
+            disabled={totalIsLoading}
+          >
+            <span className="ml-2">🧹</span>
+            تنظيف التكرار
+          </button>
+        </div>
+      </div>
 
         {/* عرض المعلومات المختارة */}
         <div className="mt-4 p-3 bg-gray-50 rounded text-center">
