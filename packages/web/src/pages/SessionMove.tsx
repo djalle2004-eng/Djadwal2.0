@@ -1,6 +1,11 @@
-import { useState, useEffect, useContext } from 'react';
-import { AcademicYearContext } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useCallback, useMemo } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { Move, Calendar, Clock, User, BookOpen, MapPin, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 
@@ -84,14 +89,31 @@ export default function SessionMove() {
   // الصلاحيات
   const { can } = usePermissions();
   
-  // الحالة المحلية
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [filteredSessions, setFilteredSessions] = useState<SessionInfo[]>([]);
-  
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading, 
+    error: scheduleError, 
+    fetchAssignments, 
+    updateAssignment 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   // حالات النقل
   const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
   const [targetDay, setTargetDay] = useState<number>(-1);
@@ -105,82 +127,30 @@ export default function SessionMove() {
   const [filterCourse, setFilterCourse] = useState<string>('');
   const [filterDay, setFilterDay] = useState<string>('');
   const [filterTime, setFilterTime] = useState<string>('');
-  
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // الحصول على السياق الأكاديمي
-  const academicYearContext = useContext(AcademicYearContext);
-  const currentYear = academicYearContext?.currentYear;
-  const currentSemester = academicYearContext?.currentSemester;
-
-  // استخدام السياق للتعامل مع التكاليف
-  const { assignments: contextAssignments, refreshAssignments, updateAssignment } = useAssignments();
-
-  // تحميل البيانات عند بدء التشغيل
-  useEffect(() => {
-    if (currentYear && currentSemester) {
-      fetchData();
-    }
-  }, [currentYear, currentSemester]);
-
-  // تحديث الجلسات عند تغيير التكاليف
-  useEffect(() => {
-    if (contextAssignments.length > 0) {
-      prepareSessions();
-    }
-  }, [contextAssignments, professors, courses, rooms, groups]);
-
-  // تطبيق التصفية
-  useEffect(() => {
-    applyFilters();
-  }, [sessions, filterProfessor, filterCourse, filterDay, filterTime]);
-
-  // البحث عن القاعات المتاحة عند تغيير اليوم أو الوقت
-  useEffect(() => {
-    if (targetDay !== -1 && targetTimeSlot !== -1) {
-      findAvailableRooms();
-    } else {
-      setAvailableRooms([]);
-      setSelectedRoom(-1);
-    }
-  }, [targetDay, targetTimeSlot, selectedSession, sessions]);
-
-  // جلب البيانات من قاعدة البيانات
-  const fetchData = async () => {
+  // تحميل البيانات
+  const fetchData = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      const [fetchedGroups, fetchedCourses, fetchedProfessors, fetchedRooms] = await Promise.all([
-        window.db.getGroups(),
-        window.db.getCourses(),
-        window.db.getProfessors(),
-        window.db.getRooms()
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments()
       ]);
-
-      setGroups(fetchedGroups);
-      setCourses(fetchedCourses);
-      setProfessors(fetchedProfessors);
-      setRooms(fetchedRooms);
-
-      await refreshAssignments();
     } catch (error) {
-      console.error("Error fetching data:", error);
-      setError("خطأ في تحميل البيانات");
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching data:', error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
 
-  // تحضير بيانات الجلسات
-  const prepareSessions = () => {
-    const yearSemesterFilteredAssignments = contextAssignments.filter(assignment => 
-      (assignment.academic_year === currentYear?.year_name || !assignment.academic_year) &&
-      (assignment.semester === currentSemester?.semester_name || !assignment.semester)
-    );
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    const sessionsWithDetails: SessionInfo[] = yearSemesterFilteredAssignments.map(assignment => {
+  const sessionsWithDetails = useMemo(() => {
+    return assignments.map(assignment => {
       const professor = professors.find(p => p.id === assignment.professor_id);
       const course = courses.find(c => c.id === assignment.course_id);
       const group = groups.find(g => g.id === assignment.group_id);
@@ -194,13 +164,23 @@ export default function SessionMove() {
         room_name: room?.name || 'غير محدد'
       };
     });
+  }, [assignments, professors, courses, groups, rooms]);
 
-    setSessions(sessionsWithDetails);
-  };
+  // البحث عن القاعات المتاحة عند تغيير اليوم أو الوقت
+  useEffect(() => {
+    if (targetDay !== -1 && targetTimeSlot !== -1) {
+      findAvailableRooms();
+    } else {
+      setAvailableRooms([]);
+      setSelectedRoom(-1);
+    }
+  }, [targetDay, targetTimeSlot, selectedSession, sessionsWithDetails]);
+
+
 
   // تطبيق التصفية
-  const applyFilters = () => {
-    let filtered = sessions;
+  const filteredSessions = useMemo(() => {
+    let filtered = sessionsWithDetails;
 
     if (filterProfessor) {
       filtered = filtered.filter(session => 
@@ -229,8 +209,8 @@ export default function SessionMove() {
       }
     }
 
-    setFilteredSessions(filtered);
-  };
+    return filtered;
+  }, [sessionsWithDetails, filterProfessor, filterCourse, filterDay, filterTime]);
 
   // التحقق من أن الأستاذ ليس "غير محدد" أو "غير معين"
   const isUnspecifiedProfessor = (professorName: string | undefined) => {
@@ -272,7 +252,7 @@ export default function SessionMove() {
       let conflictReason = '';
 
       // فحص تعارض القاعة في الوقت المحدد
-      const roomConflict = sessions.find(s => 
+      const roomConflict = sessionsWithDetails.find(s => 
         s.id !== selectedSession.id &&
         s.room_id === room.id &&
         s.day_of_week === targetDay &&
@@ -294,7 +274,7 @@ export default function SessionMove() {
       });
       
       if (isRecommended && !isProfessorUnspecified) {
-        const professorConflict = sessions.find(s => 
+        const professorConflict = sessionsWithDetails.find(s => 
           s.id !== selectedSession.id &&
           s.professor_id === selectedSession.professor_id &&
           s.day_of_week === targetDay &&
@@ -316,7 +296,7 @@ export default function SessionMove() {
 
       // فحص تعارض المجموعة
       if (isRecommended) {
-        const groupConflict = sessions.find(s => 
+        const groupConflict = sessionsWithDetails.find(s => 
           s.id !== selectedSession.id &&
           s.group_id === selectedSession.group_id &&
           s.day_of_week === targetDay &&
@@ -380,7 +360,8 @@ export default function SessionMove() {
       // تحديث الحصة في قاعدة البيانات
       if (selectedSession.id) {
         await updateAssignment(selectedSession.id, updatedSession);
-        await refreshAssignments();
+
+        addNotification({ type: 'success', message: 'تم نقل الحصة بنجاح' });
 
         const dayName = days.find(d => d.id === targetDay)?.name || 'غير محدد';
         const roomName = rooms.find(r => r.id === selectedRoom)?.name || 'غير محدد';
@@ -685,9 +666,9 @@ export default function SessionMove() {
           قائمة الحصص ({filteredSessions.length} حصة)
         </h3>
         
-        {error && (
+        {scheduleError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            {scheduleError}
           </div>
         )}
 

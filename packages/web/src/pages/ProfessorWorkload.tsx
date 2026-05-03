@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
-import { printContent } from '../utils/printUtils';
-import html2canvas from 'html2canvas';
-import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
-import { useAcademicYear } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useCallback, useMemo } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Box, Snackbar, Alert } from '@mui/material';
 import { Email as EmailIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { emailService, EmailStatus } from '../services/emailService';
@@ -164,13 +166,30 @@ const translateAcademicTitle = (title: string): string => {
 };
 
 export default function ProfessorWorkload() {
-  // الحالة
-  const { currentYear, currentSemester, refreshCurrentSemester } = useAcademicYear();
-  const { assignments } = useAssignments();
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]); // إضافة حالة للمجموعات
-  const [rooms, setRooms] = useState<Room[]>([]); // إضافة حالة للقاعات
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading: isScheduleLoading, 
+    fetchAssignments 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  // الحالة المحلية
   const [workloads, setWorkloads] = useState<ProfessorWorkloadData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -180,7 +199,6 @@ export default function ProfessorWorkload() {
   const [selectedCourse, setSelectedCourse] = useState<number | null>(null);
   const [isCourseDropdownOpen, setIsCourseDropdownOpen] = useState(false);
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
-  const [allCourses, setAllCourses] = useState<Course[]>([]);
   // إعدادات الطباعة
   const [printSettings, setPrintSettings] = useState({
     universityName: 'جامعة الشهيد حمه لخضر - الوادي',
@@ -441,7 +459,7 @@ export default function ProfessorWorkload() {
   const handleCourseSearch = (searchTerm: string) => {
     setCourseSearchTerm(searchTerm);
     if (searchTerm.trim()) {
-      const filtered = allCourses.filter(course =>
+      const filtered = courses.filter(course =>
         course.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredCourses(filtered);
@@ -506,103 +524,31 @@ export default function ProfessorWorkload() {
   };
 
   // دالة جلب البيانات للأساتذة والمقررات والمجموعات
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // الحصول على بيانات الأساتذة والمقررات والمجموعات والقاعات
-      const db = (window as any).db;
-      const professorsData = await db.getProfessors();
-      const coursesData = await db.getCourses();
-      const groupsData = await db.getGroups();
-      const roomsData = await db.getRooms();
-
-      // تحديث قائمة المقاييس للفلترة
-      setAllCourses(coursesData || []);
-
-      console.log("Données des professeurs brutes:", professorsData);
-      console.log("Données des cours brutes:", coursesData);
-      console.log("Données des groupes brutes:", groupsData);
-      console.log("Données des salles brutes:", roomsData);
-
-      // Log détaillé de chaque groupe pour voir les champs disponibles
-      if (groupsData && groupsData.length > 0) {
-        console.log(`Premier groupe: `, {
-          id: groupsData[0].id,
-          name: groupsData[0].name,
-          year: groupsData[0].year,
-          specialization: groupsData[0].specialization,
-          allFields: Object.keys(groupsData[0])
-        });
-      }
-
-      // Log détaillé de chaque cours pour voir les champs disponibles
-      if (coursesData && coursesData.length > 0) {
-        console.log(`Premier cours: `, {
-          id: coursesData[0].id,
-          name: coursesData[0].name,
-          specialization_id: coursesData[0].specialization_id,
-          specialization: coursesData[0].specialization,
-          group_year: coursesData[0].group_year,
-          year: coursesData[0].year,
-          allFields: Object.keys(coursesData[0])
-        });
-      }
-
-      // Log détaillé de chaque professeur pour voir les champs disponibles
-      professorsData.forEach((prof: any, index: number) => {
-        console.log(`Professeur ${index + 1}:`, {
-          id: prof.id,
-          name: prof.name,
-          title: prof.title,
-          Title: prof.Title,
-          academic_title: prof.academic_title,
-          'Academic Title': prof['Academic Title'],
-          allFields: Object.keys(prof)
-        });
-      });
-
-      // Traiter les données des professeurs pour inclure title et academic_title
-      const mappedProfessors = professorsData.map((prof: any) => {
-        console.log('Raw professor data from API:', {
-          id: prof.id,
-          name: prof.name,
-          title: prof.title,
-          Title: prof.Title,
-          academic_title: prof.academic_title,
-          'Academic Title': prof['Academic Title'],
-          allKeys: Object.keys(prof)
-        });
-
-        return {
-          id: prof.id,
-          name: prof.name,
-          title: prof.title || prof.Title || '',
-          academic_title: prof.academic_title || prof["Academic Title"] || '',
-          email: prof.email || ''
-        };
-      });
-
-      console.log("Professeurs avec title et academic_title:", mappedProfessors);
-
-      // تعيين البيانات للحالة
-      setProfessors(mappedProfessors);
-      setCourses(coursesData);
-      setGroups(groupsData);
-      setRooms(roomsData);
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments()
+      ]);
       setError(null);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err as Error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
 
   // جلب البيانات عند تحميل المكون
   useEffect(() => {
     fetchData();
     loadPrintSettings();
-  }, []);
+  }, [fetchData]);
 
   // حساب عبء العمل عند تغيير البيانات
   useEffect(() => {

@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { AuthProvider } from './context/AuthContext';
 import { webClient, webDataUtils } from './api/webClient';
 
 // Initialize web client if not in Electron
@@ -16,8 +15,6 @@ if (!window.electron) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <App />
   </StrictMode>
 );

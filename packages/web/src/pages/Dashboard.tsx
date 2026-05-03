@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 // تعليق استيرادات Firebase
 // import { 
 //   collection, 
@@ -9,7 +9,12 @@ import { useState, useEffect, useContext } from 'react';
 // } from 'firebase/firestore';
 // import { db } from '../lib/firebase';
 import { Users, BookOpen, DoorOpen, Users2, CalendarClock, CalendarPlus, FileText, Clock } from 'lucide-react';
-import { AcademicYearContext } from '../context/AcademicYearContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
 import packageJson from '../../package.json';
 
 // واجهات البيانات
@@ -88,9 +93,24 @@ export default function Dashboard() {
   const [showDebug, setShowDebug] = useState(false);
   const [debugData, setDebugData] = useState<any>(null);
 
-  const academicYearContext = useContext(AcademicYearContext);
-  const currentYear = academicYearContext?.currentYear || null;
-  const currentSemester = academicYearContext?.currentSemester || null;
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, departments, fetchGroups, fetchDepartments 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, fetchAssignments 
+  } = useScheduleStore();
 
   const handleDebugDatabase = async () => {
     try {
@@ -130,99 +150,65 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // جلب معلومات قاعدة البيانات
-        const databaseInfo = {
-          type: 'Turso',
-          status: 'متصل',
-          name: 'Djadwal (Cloud)',
-          isCloud: true,
-          hasConnectionString: true
-        };
-        setDbInfo(databaseInfo);
-
-        // استخدام SQLite بدلاً من Firebase
-        const [
-          professorsData,
-          coursesData,
-          roomsData,
-          assignmentsData,
-          groupsData,
-          departmentsData,
-          extraSessionsData,
-        ] = await Promise.all([
-          window.db.getProfessors(),
-          window.db.getCourses(),
-          window.db.getRooms(),
-          window.db.getAssignments(),
-          window.db.getGroups(),
-          window.db.getDepartments(),
-          window.db.getExtraSessions(),
+        setLoading(true);
+        // Fetch all data using stores
+        await Promise.all([
+          fetchProfessors(),
+          fetchCourses(),
+          fetchRooms(),
+          fetchAssignments(),
+          fetchGroups(),
+          fetchDepartments()
         ]);
 
         // Filter assignments by current academic year and semester
-        const filteredAssignments = assignmentsData?.filter((assignment: any) => {
-          if (!currentYear || !currentSemester) return true; // Show all if no year/semester selected
+        const filteredAssignments = assignments?.filter((assignment: any) => {
+          if (!currentYear || !currentSemester) return true;
           return assignment.academic_year === currentYear.year_name &&
             assignment.semester === currentSemester.semester_name;
         }) || [];
 
         setStats({
-          professors: professorsData?.length || 0,
-          courses: coursesData?.length || 0,
-          rooms: roomsData?.length || 0,
+          professors: professors?.length || 0,
+          courses: courses?.length || 0,
+          rooms: rooms?.length || 0,
           sessions: filteredAssignments.length,
-          groups: groupsData?.length || 0,
-          extraSessions: extraSessionsData?.filter((s: any) => s.session_type === 'extra').length || 0,
-          makeupSessions: extraSessionsData?.filter((s: any) => s.session_type === 'makeup').length || 0,
-          examSessions: extraSessionsData?.filter((s: any) => s.session_type === 'exam').length || 0
+          groups: groups?.length || 0,
+          extraSessions: 0, // Need to implement extra sessions in store if needed
+          makeupSessions: 0,
+          examSessions: 0
         });
 
-        // جلب أحدث الجلسات من SQLite - استخدام البيانات المفلترة
-        // نستخدم slice لأخذ آخر 5 عناصر فقط
-        const assignments = filteredAssignments.slice(0, 5);
+        // Get latest sessions
+        const latest = filteredAssignments.slice(0, 5).map((assignment: any) => {
+          const course = courses.find(c => c.id === assignment.course_id);
+          const professor = professors.find(p => p.id === assignment.professor_id);
+          const room = rooms.find(r => r.id === assignment.room_id);
+          const group = groups.find(g => g.id === assignment.group_id);
 
-        // استخدام Promise.all لجلب البيانات المرتبطة لكل جلسة
-        const fetchedSessions = await Promise.all(
-          assignments.map(async (assignment: any) => {
-            const sessionData: LatestSession = {
-              id: assignment.id,
-              course_id: assignment.course_id,
-              professor_id: assignment.professor_id,
-              room_id: assignment.room_id,
-              group_id: assignment.group_id,
-              day_of_week: assignment.day_of_week,
-              lecture_time: assignment.lecture_time
-            };
+          return {
+            id: assignment.id,
+            course_id: assignment.course_id,
+            professor_id: assignment.professor_id,
+            room_id: assignment.room_id,
+            group_id: assignment.group_id,
+            day_of_week: assignment.day_of_week,
+            lecture_time: `${assignment.start_time} - ${assignment.end_time}`,
+            courseName: course ? course.name : 'Unknown Course',
+            professorName: professor ? professor.name : 'Unknown Professor',
+            roomName: room ? room.name : 'Unknown Room',
+            groupName: group ? group.name : 'Unknown Group'
+          };
+        });
 
-            // جلب التفاصيل المرتبطة
-            // نحتاج لتصفية البيانات للعثور على العناصر المرتبطة
-            const course = coursesData.find(c => c.id === assignment.course_id);
-            const professor = professorsData.find(p => p.id === assignment.professor_id);
-            const room = roomsData.find(r => r.id === assignment.room_id);
-            const group = groupsData.find(g => g.id === assignment.group_id);
+        setLatestSessions(latest);
 
-            // استخراج البيانات من النتائج
-            sessionData.courseName = course ? course.name : 'Unknown Course';
-            sessionData.professorName = professor
-              ? `${(professor as any)["Academic Title"] || ''} ${(professor as any).name || ''}`.trim()
-              : 'Unknown Professor';
-            sessionData.roomName = room ? room.name : 'Unknown Room';
-            sessionData.groupName = group ? group.name : 'Unknown Group';
-
-            return sessionData;
-          })
-        );
-
-        setLatestSessions(fetchedSessions);
-
-        // Calculate room occupancy statistics
-        const roomOccupancyStats = roomsData?.map((room: any) => {
-          // Filter out Friday (day 5) as it's a holiday
+        // Room Occupancy
+        const roomOccupancyStats = rooms?.map((room: any) => {
           const roomAssignments = filteredAssignments.filter((assignment: any) =>
             assignment.room_id === room.id && assignment.day_of_week !== 5
           );
           const usedSlots = roomAssignments.length;
-          // 6 working days (Sun-Sat except Friday) * 6 time slots per day = 36 total possible slots per week
           const totalSlots = 36;
           const occupancyRate = totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
 
@@ -236,51 +222,41 @@ export default function Dashboard() {
 
         setRoomOccupancy(roomOccupancyStats);
 
-        // Calculate professor workload statistics
-        const professorWorkloadStats = professorsData?.map((professor: any) => {
+        // Professor Workload
+        const professorWorkloadStats = professors?.map((professor: any) => {
           const professorAssignments = filteredAssignments.filter((assignment: any) => assignment.professor_id === professor.id);
           const sessionsCount = professorAssignments.length;
-          // Assuming each session is 1.5 hours on average
           const totalHours = sessionsCount * 1.5;
 
           return {
-            professorName: `${professor["Academic Title"] || ''} ${professor.name || ''}`.trim(),
+            professorName: professor.name || '',
             sessionsCount,
-            totalHours: Math.round(totalHours * 10) / 10 // Round to 1 decimal place
+            totalHours: Math.round(totalHours * 10) / 10
           };
         }).filter(prof => prof.sessionsCount > 0)
           .sort((a, b) => b.sessionsCount - a.sessionsCount) || [];
 
         setProfessorWorkload(professorWorkloadStats);
 
-        // Calculate department statistics
-        const departmentStatsMap = new Map();
-
-        departmentsData?.forEach((dept: any) => {
-          // الأفواج المرتبطة بالقسم
-          const deptGroups = groupsData?.filter((group: any) => group.department_id === dept.id) || [];
-
-          // المقاييس المرتبطة بالقسم
-          const deptCourses = coursesData?.filter((course: any) => course.department_id === dept.id) || [];
-
-          // الأساتذة المدرّسين لهذا القسم (من خلال الحصص)
+        // Department Stats
+        const deptStats = departments?.map((dept: any) => {
+          const deptGroups = groups?.filter((group: any) => group.department_id === dept.id) || [];
+          const deptCourses = courses?.filter((course: any) => course.department_id === dept.id) || [];
           const deptGroupIds = deptGroups.map((g: any) => g.id);
           const deptAssignments = filteredAssignments.filter((assignment: any) =>
             deptGroupIds.includes(assignment.group_id)
           );
           const deptProfessorIds = new Set(deptAssignments.map((a: any) => a.professor_id));
-          const professorsCount = deptProfessorIds.size;
 
-          departmentStatsMap.set(dept.id, {
+          return {
             departmentName: dept.name,
             groupsCount: deptGroups.length,
             coursesCount: deptCourses.length,
-            professorsCount: professorsCount
-          });
-        });
+            professorsCount: deptProfessorIds.size
+          };
+        }) || [];
 
-        setDepartmentStats(Array.from(departmentStatsMap.values()));
-
+        setDepartmentStats(deptStats);
         setLoading(false);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);

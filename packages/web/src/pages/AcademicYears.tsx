@@ -1,22 +1,27 @@
-import { useState, useEffect } from 'react';
-import {
-  getAcademicYears,
-  addAcademicYear,
-  setActiveAcademicYear,
-  getSemesters,
-  addSemester,
-  updateSemester,
-  setActiveSemester,
-  importDataFromPreviousYear
-} from '../services/academicYearService';
-import { useAcademicYear } from '../context/AcademicYearContext';
+import React, { useState, useEffect } from 'react';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import { AcademicYear, Semester, ImportOptions } from '../types/academicYear';
 import { Plus, Check, Download, Edit2, Save, X, Eye, EyeOff } from 'lucide-react';
 
 export default function AcademicYears() {
-  const { currentYear, setCurrentYear, setCurrentSemester } = useAcademicYear();
-  const [years, setYears] = useState<AcademicYear[]>([]);
-  const [semesters, setSemesters] = useState<Semester[]>([]);
+  const { 
+    currentYear, 
+    currentSemester,
+    years,
+    semesters,
+    isLoading: loading,
+    fetchAcademicYears,
+    addAcademicYear: storeAddAcademicYear,
+    setActiveYear,
+    fetchSemesters,
+    addSemester: storeAddSemester,
+    updateSemester: storeUpdateSemester,
+    setActiveSemester: storeSetActiveSemester,
+    importData
+  } = useAcademicStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null);
   const [newYearName, setNewYearName] = useState('');
   const [newSemesterName, setNewSemesterName] = useState('');
@@ -29,8 +34,6 @@ export default function AcademicYears() {
     importGroups: true,
     importCourses: true
   });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [editingSemesterId, setEditingSemesterId] = useState<number | null>(null);
   const [editedSemesterName, setEditedSemesterName] = useState('');
   const [editedSemesterStartDate, setEditedSemesterStartDate] = useState('');
@@ -38,133 +41,87 @@ export default function AcademicYears() {
   const [editedSemesterIsPublic, setEditedSemesterIsPublic] = useState(true);
 
   useEffect(() => {
-    loadAcademicYears();
+    fetchAcademicYears();
   }, []);
 
   useEffect(() => {
+    if (currentYear) {
+      setSelectedYearId(currentYear.id);
+    } else if (years.length > 0 && !selectedYearId) {
+      setSelectedYearId(years[0].id);
+    }
+  }, [currentYear, years]);
+
+  useEffect(() => {
     if (selectedYearId) {
-      loadSemesters(selectedYearId);
+      fetchSemesters(selectedYearId);
     }
-  }, [selectedYearId]);
-
-  const loadAcademicYears = async () => {
-    try {
-      setLoading(true);
-      const yearsList = await getAcademicYears();
-      setYears(yearsList);
-
-      // If we have a current year, select it
-      if (currentYear) {
-        setSelectedYearId(currentYear.id);
-      } else if (yearsList.length > 0) {
-        // Otherwise select the first one
-        setSelectedYearId(yearsList[0].id);
-      }
-
-      setLoading(false);
-    } catch (err) {
-      setError('فشل في تحميل السنوات الدراسية');
-      setLoading(false);
-      console.error(err);
-    }
-  };
-
-  const loadSemesters = async (yearId: number) => {
-    try {
-      const semestersList = await getSemesters(yearId);
-      setSemesters(semestersList);
-    } catch (err) {
-      console.error('فشل في تحميل الفصول الدراسية:', err);
-    }
-  };
+  }, [selectedYearId, fetchSemesters]);
 
   const handleAddYear = async () => {
     if (!newYearName.trim()) return;
-
     try {
-      await addAcademicYear(newYearName);
+      await storeAddAcademicYear(newYearName);
       setNewYearName('');
-      await loadAcademicYears();
+      addNotification({ type: 'success', message: 'تم إضافة السنة الدراسية بنجاح' });
     } catch (err) {
-      setError('فشل في إضافة السنة الدراسية');
       console.error(err);
+      addNotification({ type: 'error', message: 'فشل في إضافة السنة الدراسية' });
     }
   };
 
   const handleSetActiveYear = async (yearId: number) => {
     try {
-      await setActiveAcademicYear(yearId);
-
-      // Update the context with the new current year
-      const updatedYear = years.find(y => y.id === yearId);
-      if (updatedYear) {
-        setCurrentYear({ ...updatedYear, is_current: true });
-      }
-
-      // Refresh the list
-      await loadAcademicYears();
+      await setActiveYear(yearId);
+      addNotification({ type: 'success', message: 'تم تعيين السنة الدراسية الحالية بنجاح' });
     } catch (err) {
-      setError('فشل في تعيين السنة الدراسية الحالية');
       console.error(err);
+      addNotification({ type: 'error', message: 'فشل في تعيين السنة الدراسية الحالية' });
     }
   };
 
   const handleAddSemester = async () => {
     if (!selectedYearId || !newSemesterName.trim() || !newSemesterStartDate || !newSemesterEndDate) return;
-
     try {
-      await addSemester(
+      await storeAddSemester(
         selectedYearId,
         newSemesterName,
         newSemesterStartDate,
         newSemesterEndDate
       );
-
       setNewSemesterName('');
       setNewSemesterStartDate('');
       setNewSemesterEndDate('');
-      await loadSemesters(selectedYearId);
+      addNotification({ type: 'success', message: 'تم إضافة الفصل الدراسي بنجاح' });
     } catch (err) {
-      setError('فشل في إضافة الفصل الدراسي');
       console.error(err);
+      addNotification({ type: 'error', message: 'فشل في إضافة الفصل الدراسي' });
     }
   };
 
   const handleSetActiveSemester = async (semesterId: number) => {
     try {
-      await setActiveSemester(semesterId);
-
-      // Update the context with the new current semester
-      const updatedSemester = semesters.find(s => s.id === semesterId);
-      if (updatedSemester) {
-        setCurrentSemester({ ...updatedSemester, is_current: true });
-      }
-
-      // Refresh the list
-      if (selectedYearId) {
-        await loadSemesters(selectedYearId);
-      }
+      await storeSetActiveSemester(semesterId);
+      addNotification({ type: 'success', message: 'تم تعيين الفصل الدراسي الحالي بنجاح' });
     } catch (err) {
-      setError('فشل في تعيين الفصل الدراسي الحالي');
       console.error(err);
+      addNotification({ type: 'error', message: 'فشل في تعيين الفصل الدراسي الحالي' });
     }
   };
 
   const handleImportData = async () => {
     if (!sourceYearId || !selectedYearId) return;
-
     try {
-      await importDataFromPreviousYear(
+      await importData(
         sourceYearId,
         selectedYearId,
         importOptions
       );
-
       setShowImportModal(false);
-      // Optionally reload data after import
+      addNotification({ type: 'success', message: 'تم استيراد البيانات بنجاح' });
     } catch (err) {
-      setError('فشل في استيراد البيانات من السنة السابقة');
       console.error(err);
+      addNotification({ type: 'error', message: 'فشل في استيراد البيانات من السنة السابقة' });
     }
   };
 
@@ -180,11 +137,6 @@ export default function AcademicYears() {
 
       <main>
         <div className="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
-          {error && (
-            <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-md">
-              {error}
-            </div>
-          )}
 
           {/* Add New Academic Year */}
           <div className="bg-white p-6 shadow rounded-lg mb-6">
@@ -352,7 +304,7 @@ export default function AcademicYears() {
                                 <button
                                   onClick={async () => {
                                     try {
-                                      await updateSemester(
+                                      await storeUpdateSemester(
                                         editingSemesterId,
                                         editedSemesterName,
                                         editedSemesterStartDate,
@@ -360,15 +312,10 @@ export default function AcademicYears() {
                                         editedSemesterIsPublic
                                       );
                                       setEditingSemesterId(null);
-                                      setEditedSemesterName('');
-                                      setEditedSemesterStartDate('');
-                                      setEditedSemesterEndDate('');
-                                      if (selectedYearId) {
-                                        await loadSemesters(selectedYearId);
-                                      }
+                                      addNotification({ type: 'success', message: 'تم تحديث الفصل الدراسي بنجاح' });
                                     } catch (err) {
-                                      setError('فشل في تعديل الفصل الدراسي');
                                       console.error(err);
+                                      addNotification({ type: 'error', message: 'فشل في تعديل الفصل الدراسي' });
                                     }
                                   }}
                                   className="text-green-600 hover:text-green-800"
@@ -416,16 +363,16 @@ export default function AcademicYears() {
                                 <button
                                   onClick={async () => {
                                     try {
-                                      await updateSemester(
+                                      await storeUpdateSemester(
                                         semester.id,
                                         semester.semester_name,
                                         semester.start_date,
                                         semester.end_date,
                                         !semester.is_public
                                       );
-                                      if (selectedYearId) await loadSemesters(selectedYearId);
+                                      addNotification({ type: 'success', message: 'تم تغيير حالة الظهور بنجاح' });
                                     } catch (err) {
-                                      setError('فشل في تغيير حالة الظهور');
+                                      addNotification({ type: 'error', message: 'فشل في تغيير حالة الظهور' });
                                     }
                                   }}
                                   className={`${semester.is_public ? 'text-blue-500' : 'text-gray-400'} hover:text-blue-700`}

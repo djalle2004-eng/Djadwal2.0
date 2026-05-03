@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Edit, Trash2, Plus, Save, X, Clock, Users, BookOpen, MapPin } from 'lucide-react';
-import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
-import { useAcademicYear } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useCallback } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { printContent, generateFullDocument } from '../utils/printUtils';
 import { exportScheduleToExcel } from '../utils/excelUtils';
@@ -80,15 +83,39 @@ export default function GroupSchedules() {
   // الصلاحيات
   const { can } = usePermissions();
 
-  // الحالة الأساسية
-  const { currentYear, currentSemester } = useAcademicYear();
-  const { assignments, refreshAssignments } = useAssignments();
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading: isScheduleLoading, 
+    fetchAssignments,
+    updateAssignment,
+    addAssignment,
+    deleteAssignment: deleteAssignmentFromStore,
+    timeSlots,
+    fetchTimeSlots
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
 
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  // فلاتر التخصص والمجموعة
+  const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   // فلاتر التخصص والمجموعة
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
@@ -235,37 +262,31 @@ export default function GroupSchedules() {
   };
 
   // جلب البيانات
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const db = (window as any).db;
-
-      const [groupsData, professorsData, coursesData, roomsData, timeSlotsData] = await Promise.all([
-        db.getGroups(),
-        db.getProfessors(),
-        db.getCourses(),
-        db.getRooms(),
-        db.getTimeSlots()
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchTimeSlots(),
+        fetchAssignments()
       ]);
-
-      setGroups(groupsData || []);
-      setProfessors(professorsData || []);
-      setCourses(coursesData || []);
-      setRooms(roomsData || []);
-      setTimeSlots(timeSlotsData || []);
       setError(null);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err as Error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchTimeSlots, fetchAssignments]);
 
   useEffect(() => {
     fetchData();
     loadPrintSettings();
-  }, []);
+  }, [fetchData]);
 
   // تصفية التكليفات للمجموعة المختارة
   const groupAssignments = useMemo(() => {
@@ -329,30 +350,27 @@ export default function GroupSchedules() {
     }
 
     try {
-      const db = (window as any).db;
-
       const assignmentData = {
         ...editForm,
         group_id: selectedGroup,
         academic_year: currentYear?.year_name,
         semester: currentSemester?.semester_name,
-      };
+      } as Assignment;
 
       if (editForm.id) {
-        // تحديث
-        await db.updateAssignment(editForm.id, assignmentData);
+        await updateAssignment(editForm.id, assignmentData);
+        addNotification({ type: 'success', message: 'تم تحديث التكليف بنجاح' });
       } else {
-        // إضافة جديد
-        await db.addAssignment(assignmentData);
+        await addAssignment(assignmentData);
+        addNotification({ type: 'success', message: 'تم إضافة التكليف بنجاح' });
       }
 
-      await refreshAssignments();
       setEditingCell(null);
       setEditForm({});
       setIsAddingNew(false);
     } catch (err) {
       console.error('Error saving assignment:', err);
-      alert('حدث خطأ أثناء حفظ التكليف');
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء حفظ التكليف' });
     }
   };
 
@@ -361,12 +379,11 @@ export default function GroupSchedules() {
     if (!window.confirm('هل أنت متأكد من حذف هذا التكليف؟')) return;
 
     try {
-      const db = (window as any).db;
-      await db.deleteAssignment(assignmentId);
-      await refreshAssignments();
+      await deleteAssignmentFromStore(assignmentId);
+      addNotification({ type: 'success', message: 'تم حذف التكليف بنجاح' });
     } catch (error) {
       console.error('Error deleting assignment:', error);
-      alert('حدث خطأ أثناء حذف التكليف');
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء حذف التكليف' });
     }
   };
 

@@ -21,17 +21,46 @@ export interface Assignment {
   room_name?: string;
 }
 
+export interface ExtraSession {
+  id?: number;
+  room_id: number;
+  room_name?: string;
+  professor_id: number;
+  professor_name?: string;
+  group_id: number;
+  group_name?: string;
+  course_id: number;
+  course_name?: string;
+  session_date: string;
+  start_time: string;
+  end_time: string;
+  session_type: 'extra' | 'makeup' | 'exam' | 'semester_exam';
+  description?: string;
+  exam_note?: string;
+  is_archived?: number;
+}
+
 interface ScheduleState {
   assignments: Assignment[];
+  extraSessions: ExtraSession[];
+  timeSlots: any[];
   isLoading: boolean;
   error: string | null;
   draggedAssignment: Assignment | null;
 
   // Actions
   fetchAssignments: (specialization?: string) => Promise<void>;
+  fetchTimeSlots: () => Promise<void>;
+  fetchExtraSessions: () => Promise<void>;
   addAssignment: (assignment: Assignment) => Promise<void>;
   updateAssignment: (id: number, assignment: Assignment) => Promise<void>;
   deleteAssignment: (id: number) => Promise<void>;
+  
+  addExtraSession: (session: ExtraSession) => Promise<void>;
+  updateExtraSession: (id: number, session: ExtraSession) => Promise<void>;
+  deleteExtraSession: (id: number) => Promise<void>;
+  archivePastSessions: () => Promise<{ archived: number, error?: string }>;
+  
   setDraggedAssignment: (assignment: Assignment | null) => void;
   reset: () => void;
 }
@@ -40,6 +69,8 @@ export const useScheduleStore = create<ScheduleState>()(
   devtools(
     immer((set, get) => ({
       assignments: [],
+      extraSessions: [],
+      timeSlots: [],
       isLoading: false,
       error: null,
       draggedAssignment: null,
@@ -50,7 +81,6 @@ export const useScheduleStore = create<ScheduleState>()(
 
         set((state) => { state.isLoading = true; });
         try {
-          // Using window.db as in the original code
           const fetched = await window.db.getAssignments(
             currentYear.year_name,
             currentSemester.semester_name,
@@ -65,6 +95,82 @@ export const useScheduleStore = create<ScheduleState>()(
             state.error = error.message;
             state.isLoading = false;
           });
+        }
+      },
+
+      fetchExtraSessions: async () => {
+        set((state) => { state.isLoading = true; });
+        try {
+          const fetched = await window.db.getExtraSessions();
+          set((state) => {
+            state.extraSessions = fetched;
+            state.isLoading = false;
+          });
+        } catch (error: any) {
+          set((state) => {
+            state.error = error.message;
+            state.isLoading = false;
+          });
+        }
+      },
+
+      addExtraSession: async (session) => {
+        try {
+          const result = await window.db.addExtraSession(session);
+          set((state) => {
+            state.extraSessions.push(result);
+          });
+        } catch (error: any) {
+          throw error;
+        }
+      },
+
+      updateExtraSession: async (id, session) => {
+        try {
+          const result = await window.db.updateExtraSession(id, session);
+          set((state) => {
+            const idx = state.extraSessions.findIndex(s => s.id === id);
+            if (idx !== -1) state.extraSessions[idx] = result;
+          });
+        } catch (error: any) {
+          throw error;
+        }
+      },
+
+      deleteExtraSession: async (id) => {
+        try {
+          await window.db.deleteExtraSession(id);
+          set((state) => {
+            state.extraSessions = state.extraSessions.filter(s => s.id !== id);
+          });
+        } catch (error: any) {
+          throw error;
+        }
+      },
+
+      archivePastSessions: async () => {
+        try {
+          const result = await window.db.archivePastSessions();
+          if (!result.error) {
+            const fetched = await window.db.getExtraSessions();
+            set((state) => {
+              state.extraSessions = fetched;
+            });
+          }
+          return result;
+        } catch (error: any) {
+          return { archived: 0, error: error.message };
+        }
+      },
+
+      fetchTimeSlots: async () => {
+        try {
+          const fetched = await window.db.getTimeSlots();
+          set((state) => {
+            state.timeSlots = fetched;
+          });
+        } catch (error: any) {
+          console.error('Error fetching time slots:', error);
         }
       },
 

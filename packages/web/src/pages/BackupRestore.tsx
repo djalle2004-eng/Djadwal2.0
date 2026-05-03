@@ -34,7 +34,7 @@ import {
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../stores/useAuthStore';
 
 interface BackupRecord {
   id: number;
@@ -58,7 +58,7 @@ export default function BackupRestore() {
   const [selectedBackup, setSelectedBackup] = useState<BackupRecord | null>(null);
   const [backupFormat, setBackupFormat] = useState('json');
   const [restoreMode, setRestoreMode] = useState<'replace' | 'merge'>('replace');
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     loadBackups();

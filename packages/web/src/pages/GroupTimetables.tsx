@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
-import { printContent, generateFullDocument } from '../utils/printUtils';
-import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
-import { useAcademicYear } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useCallback, useMemo } from 'react';
 
 // واجهة للمجموعة
 interface Group {
@@ -68,13 +71,30 @@ interface TimeSlot {
 }
 
 export default function GroupTimetables() {
-  // الحالة
-  const { currentYear, currentSemester, refreshCurrentSemester } = useAcademicYear();
-  const { assignments } = useAssignments();
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading: isScheduleLoading, 
+    fetchAssignments 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  // الحالة المحلية
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,36 +166,32 @@ export default function GroupTimetables() {
   };
 
   // دالة جلب البيانات
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const db = (window as any).db;
-      const [groupsData, professorsData, coursesData, roomsData] = await Promise.all([
-        db.getGroups(),
-        db.getProfessors(),
-        db.getCourses(),
-        db.getRooms()
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments()
       ]);
-
-      setGroups(groupsData);
-      setProfessors(professorsData);
-      setCourses(coursesData);
-      setRooms(roomsData);
       setTimeSlots(defaultTimeSlots);
       setError(null);
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err as Error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
 
   // جلب البيانات عند تحميل المكون
   useEffect(() => {
     fetchData();
     loadPrintSettings();
-  }, []);
+  }, [fetchData]);
 
   // تصفية المجموعات حسب البحث
   const filteredGroups = groups.filter(group =>
@@ -253,7 +269,6 @@ export default function GroupTimetables() {
     }
 
     try {
-      await refreshCurrentSemester();
 
       // ✅ بناء معلومات المجموعة
       const groupInfo = `

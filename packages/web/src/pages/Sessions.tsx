@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
-import { AcademicYearContext } from '../context/AcademicYearContext';
-import { useAssignments, AssignmentProvider } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
 import { usePrintSettings } from '../hooks/usePrintSettings';
 import { exportTableToExcel } from '../utils/excelUtils';
@@ -95,21 +99,54 @@ const arabicCompare = (a: string, b: string): number => {
   return a.localeCompare(b, 'ar');
 };
 
-// Composant conteneur qui utilise le provider et passe le composant enfant
-const SessionsWithProvider = () => {
+const Sessions: React.FC = () => {
   return (
-    <AssignmentProvider>
-      <SessionsContent />
-    </AssignmentProvider>
+    <SessionsContent />
   );
 };
 
 // Composant principal avec le contenu
 const SessionsContent = () => {
-  // Accéder au contexte de l'année académique
-  const academicContext = useContext(AcademicYearContext);
-  const currentYear = academicContext?.currentYear;
-  const currentSemester = academicContext?.currentSemester;
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading: loading, 
+    error: scheduleError, 
+    fetchAssignments, 
+    deleteAssignment: storeDeleteAssignment 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  // Sorting state
+  const [sortColumn, setSortColumn] = useState<keyof AssignmentWithDetails | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Filter state
+  const [filteredSessions, setFilteredSessions] = useState<AssignmentWithDetails[]>([]);
+  const [filterDay, setFilterDay] = useState('');
+  const [filterRoom, setFilterRoom] = useState('');
+  const [filterGroupSpecialization, setFilterGroupSpecialization] = useState('');
+  const [filterProfessor, setFilterProfessor] = useState('');
+
+  // Search state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   // قائمة توقيتات المحاضرات مرتبة
   const lectureTimes = [
@@ -121,144 +158,58 @@ const SessionsContent = () => {
     '15.30 - 17.00'
   ];
 
-  const [sessions, setSessions] = useState<AssignmentWithDetails[]>([]);
-  const [filteredSessions, setFilteredSessions] = useState<AssignmentWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState<keyof AssignmentWithDetails | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  // استخدام React.useState للتأكد من استخدام React
-  const [filterDay, setFilterDay] = useState('');
-  const [filterRoom, setFilterRoom] = useState('');
-  const [filterGroupSpecialization, setFilterGroupSpecialization] = useState('');
-  const [filterProfessor, setFilterProfessor] = useState('');
-
-  // حالة البحث عن الأستاذ
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  // Accéder au contexte d'affectation
-  const assignmentContext = useAssignments();
-
   // Fetch sessions data
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      console.log('جاري جلب البيانات...');
-
-      // Récupérer les données avec le contexte ou directement
-      let assignmentsData;
-
-      try {
-        // الحصول على السنة الأكاديمية والفصل الدراسي الحاليين
-        const yearName = currentYear ? currentYear.year_name : null;
-        const semesterName = currentSemester ? currentSemester.semester_name : null;
-
-        console.log('Sessions - Current context values:', {
-          currentYear: currentYear,
-          currentSemester: currentSemester,
-          yearName,
-          semesterName
-        });
-
-        // Utiliser le contexte pour la cohérence des données مع الفلترة
-        assignmentsData = await assignmentContext.getAssignments(yearName, semesterName);
-        console.log(`تم العثور على ${assignmentsData.length} تكليف من السياق (مفلتر)`);
-      } catch (err) {
-        console.error("Erreur lors de l'accès au contexte d'affectation:", err);
-        // Fallback: Utiliser l'appel direct à la base de données مع الفلترة
-        const yearName = currentYear ? currentYear.year_name : null;
-        const semesterName = currentSemester ? currentSemester.semester_name : null;
-        assignmentsData = await window.db.getAssignments(yearName, semesterName);
-        console.log(`تم العثور على ${assignmentsData.length} تكليف (طريقة بديلة - مفلتر)`);
-      }
-
-      // Fetch related collections for data enrichment
-      console.log('جاري جلب البيانات المرتبطة...');
-
-      try {
-        // Use double casting through unknown to avoid TypeScript errors
-        const professorsData = await window.db.getProfessors() as unknown as Professor[];
-        const coursesData = await window.db.getCourses() as unknown as Course[];
-        const groupsData = await window.db.getGroups() as unknown as Group[];
-        const roomsData = await window.db.getRooms() as unknown as Room[];
-
-        console.log(`تم جلب: ${professorsData.length} أستاذ, ${coursesData.length} مقرر, ${groupsData.length} مجموعة, ${roomsData.length} قاعة`);
-
-        // Combine data for display
-        const assignmentsWithDetails: AssignmentWithDetails[] = assignmentsData
-          .filter(assignment => {
-            // Vérifier que tous les champs requis sont présents
-            return assignment.id &&
-              assignment.professor_id &&
-              assignment.course_id &&
-              assignment.group_id &&
-              assignment.room_id &&
-              assignment.day_of_week !== undefined &&
-              assignment.start_time &&
-              assignment.end_time;
-          })
-          .map(assignment => {
-            const professor = professorsData.find(p => p.id === assignment.professor_id);
-            const course = coursesData.find(c => c.id === assignment.course_id);
-            const group = groupsData.find(g => g.id === assignment.group_id);
-            const room = roomsData.find(r => r.id === assignment.room_id);
-
-            // Vérifier que tous les objets associés existent
-            if (!professor || !course || !group || !room) {
-              console.warn('Données manquantes pour l\'affectation:', assignment);
-              return null;
-            }
-
-            return {
-              ...assignment,
-              professorName: professor.name || `${professor.first_name || ''} ${professor.last_name || ''}`.trim(),
-              courseName: course.name,
-              groupName: group.name,
-              groupSpecialization: group.specialization || '',
-              roomName: room.name,
-              lecture_time: `${assignment.start_time} - ${assignment.end_time}`,
-              dayName: convertDay(assignment.day_of_week)
-            };
-          })
-          .filter((assignment): assignment is AssignmentWithDetails => assignment !== null);
-
-        console.log(`تم معالجة ${assignmentsWithDetails.length} جلسة بنجاح`);
-
-        setSessions(assignmentsWithDetails);
-        setFilteredSessions(assignmentsWithDetails);
-        console.log('تم تحميل البيانات بنجاح');
-      } catch (innerError) {
-        console.error('خطأ في جلب البيانات المرتبطة:', innerError);
-        setError(handleError(innerError));
-      }
-    } catch (err) {
-      console.error('خطأ في fetchData:', err);
-      setError(handleError(err));
-    } finally {
-      setLoading(false);
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
+
+  const sessionsWithDetails = useMemo(() => {
+    return assignments.map(assignment => {
+      const professor = professors.find(p => p.id === assignment.professor_id);
+      const course = courses.find(c => c.id === assignment.course_id);
+      const group = groups.find(g => g.id === assignment.group_id);
+      const room = rooms.find(r => r.id === assignment.room_id);
+
+      if (!professor || !course || !group || !room) return null;
+
+      return {
+        ...assignment,
+        professorName: professor.name || '',
+        courseName: course.name,
+        groupName: group.name,
+        groupSpecialization: group.specialization || '',
+        roomName: room.name,
+        lecture_time: `${assignment.start_time} - ${assignment.end_time}`,
+        dayName: convertDay(assignment.day_of_week)
+      };
+    }).filter((a): a is AssignmentWithDetails => a !== null);
+  }, [assignments, professors, courses, groups, rooms]);
 
   // Apply filters whenever filter state or sessions change
   useEffect(() => {
-    if (sessions.length > 0) {
-      applyFilters();
-    }
+    applyFilters();
   }, [
-    sessions,
+    sessionsWithDetails,
     filterDay,
     filterRoom,
     filterGroupSpecialization,
     currentYear,
     currentSemester
-    // إزالة filterProfessor من هنا لتجنب التطبيق المزدوج للفلترة
   ]);
 
   const applyFilters = (professorFilter?: string) => {
-    let result = sessions;
+    let result = sessionsWithDetails;
 
     // Filter by day
     if (filterDay) {
@@ -402,15 +353,14 @@ const SessionsContent = () => {
   };
 
   // Get unique values for filters
-  const uniqueDays = [...new Set(sessions.map(s => s.dayName))];
-  const uniqueRooms = [...new Set(sessions.map(s => s.roomName))];
-  const uniqueGroupSpecializations = [...new Set(sessions.map(s => s.groupSpecialization || 'غير محدد'))];
+  const uniqueDays = [...new Set(sessionsWithDetails.map(s => s.dayName))];
+  const uniqueRooms = [...new Set(sessionsWithDetails.map(s => s.roomName))];
+  const uniqueGroupSpecializations = [...new Set(sessionsWithDetails.map(s => s.groupSpecialization || 'غير محدد'))];
 
-  // احصل على قائمة الأساتذة الفريدة مع دعم البحث
   const uniqueProfessors = React.useMemo(() => {
     // جميع الأساتذة الفريدين
     const allProfessors = [...new Set(
-      sessions
+      sessionsWithDetails
         .filter(s => s.professorName)
         .map(s => s.professorName || 'أستاذ غير معروف')
     )];
@@ -456,44 +406,13 @@ const SessionsContent = () => {
   };
 
   const handleDeleteAssignment = async (assignment: AssignmentWithDetails) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه المحاضرة؟')) return;
     try {
-      // Vérifier si c'est une affectation unique
-      const isUnique = sessions.filter(s =>
-        s.professor_id === assignment.professor_id &&
-        s.course_id === assignment.course_id &&
-        s.group_id === assignment.group_id &&
-        s.room_id === assignment.room_id &&
-        s.day_of_week === assignment.day_of_week &&
-        s.start_time === assignment.start_time &&
-        s.end_time === assignment.end_time
-      ).length === 1;
-
-      if (isUnique) {
-        // Afficher une boîte de dialogue de confirmation
-        const confirmMessage = `هل أنت متأكد من حذف هذه المحاضرة؟\n\n` +
-          `المادة: ${assignment.courseName}\n` +
-          `الأستاذ: ${assignment.professorName}\n` +
-          `المجموعة: ${assignment.groupName}\n` +
-          `القاعة: ${assignment.roomName}\n` +
-          `اليوم: ${assignment.dayName}\n` +
-          `الوقت: ${assignment.lecture_time}`;
-
-        if (!window.confirm(confirmMessage)) {
-          return;
-        }
-      }
-
-      // Supprimer l'affectation
-      await window.db.deleteAssignment(assignment.id);
-
-      // Rafraîchir les données
-      await fetchData();
-
-      // Afficher un message de succès
-      alert('تم حذف المحاضرة بنجاح');
+      await storeDeleteAssignment(assignment.id);
+      addNotification({ type: 'success', message: 'تم حذف المحاضرة بنجاح' });
     } catch (error) {
       console.error('خطأ في حذف المحاضرة:', error);
-      alert('حدث خطأ أثناء حذف المحاضرة');
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء حذف المحاضرة' });
     }
   };
 
@@ -593,18 +512,9 @@ const SessionsContent = () => {
 
   const tableElement = React.useRef<HTMLTableElement>(null);
 
-  // تحميل البيانات عند تحميل الصفحة
   useEffect(() => {
     fetchData();
-  }, []);
-
-  // إعادة جلب البيانات عند تغيير السنة الأكاديمية أو الفصل الدراسي
-  useEffect(() => {
-    if (currentYear && currentSemester) {
-      console.log('Sessions - Academic year or semester changed, refetching data...');
-      fetchData();
-    }
-  }, [currentYear, currentSemester]);
+  }, [fetchData]);
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -780,5 +690,4 @@ const SessionsContent = () => {
   );
 };
 
-// Exporter le composant avec le provider
-export default SessionsWithProvider;
+export default Sessions;

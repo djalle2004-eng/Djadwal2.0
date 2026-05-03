@@ -15,11 +15,8 @@ import AcademicYears from "./pages/AcademicYears";
 import TestLucide from "./components/TestLucide"; // Test d'icône Lucide
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
-import { UserAuth } from "./context/AuthContext";
-import { AcademicYearProvider } from "./context/AcademicYearContext";
-import { AssignmentProvider } from "./context/AssignmentContext";
-import { SandboxProvider, useSandbox } from "./context/SandboxContext";
-import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { useScheduleStore } from './stores/useScheduleStore';
+import { useSandboxStore } from './stores/useSandboxStore';
 import Schedule from './pages/Schedule';
 import GroupSchedules from './pages/GroupSchedules';
 import PrintSettings from './pages/PrintSettingsNew';
@@ -74,7 +71,7 @@ const Layout = ({ children }: LayoutProps) => {
   const isAdmin = useIsAdmin();
   const { theme, setTheme } = useUIStore();
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
-  const { isSandboxMode, hasChanges } = useSandbox();
+  const { isSandboxMode, hasChanges } = useSandboxStore();
 
   // Warn on browser close/refresh
   useEffect(() => {
@@ -368,16 +365,10 @@ function App() {
   }, [loadActiveSettings]);
 
   return (
-    <AcademicYearProvider>
-      <AssignmentProvider>
-        <SandboxProvider>
-          <ThemeProvider>
-            <RouterProvider router={router} />
-            <Notifications />
-          </ThemeProvider>
-        </SandboxProvider>
-      </AssignmentProvider>
-    </AcademicYearProvider>
+    <>
+      <RouterProvider router={router} />
+      <Notifications />
+    </>
   );
 }
 

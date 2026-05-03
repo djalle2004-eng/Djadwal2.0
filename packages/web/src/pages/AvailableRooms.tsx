@@ -35,9 +35,14 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { arSA } from 'date-fns/locale';
-import { printContent, generateSessionsListContent, generateIndividualSessionContent, generateStudentAnnouncementContent } from '../utils/printUtils';
-import PrintIcon from '@mui/icons-material/Print';
-import { useAcademicYear } from '../context/AcademicYearContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useCallback, useMemo } from 'react';
 import { getDepartments } from '../services/departmentService';
 import { getSpecializationsByDepartment, getGroupsBySpecializationId } from '../services/groupService';
 
@@ -157,15 +162,47 @@ const timeToMinutes = (time: string): number => {
 };
 
 export default function AvailableRooms() {
-  // États pour les données
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [extraSessions, setExtraSessions] = useState<ExtraSession[]>([]); // الحصص القادمة فقط (غير مؤرشفة)
-  const [archivedSessions, setArchivedSessions] = useState<ExtraSession[]>([]); // الحصص المؤرشفة
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments: regularAssignments, 
+    extraSessions: allExtraSessions,
+    isLoading: isScheduleLoading, 
+    fetchAssignments,
+    fetchExtraSessions: fetchExtraSessionsFromStore,
+    addExtraSession,
+    updateExtraSession,
+    deleteExtraSession,
+    archivePastSessions: archivePastSessionsInStore
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  // Filter sessions into upcoming and archived
+  const extraSessions = useMemo(() => 
+    allExtraSessions.filter((s) => !s.is_archived || s.is_archived === 0),
+    [allExtraSessions]
+  );
+  
+  const archivedSessions = useMemo(() => 
+    allExtraSessions.filter((s) => s.is_archived === 1),
+    [allExtraSessions]
+  );
+
   const [showArchived, setShowArchived] = useState(false); // إظهار/إخفاء الأرشيف
-  const [regularAssignments, setRegularAssignments] = useState<RegularAssignment[]>([]);
 
   // États pour le chargement et les erreurs
   const [loading, setLoading] = useState(true);
@@ -261,138 +298,55 @@ export default function AvailableRooms() {
   const [announcementProfessors, setAnnouncementProfessors] = useState<Professor[]>([]);
 
   // Fonctions de chargement des données
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        console.log('Loading initial data...');
-
-        const roomsData = await window.db.getRooms();
-        const professorsData = await window.db.getProfessors();
-        const coursesData = await window.db.getCourses();
-        const groupsData = await window.db.getGroups();
-
-        setRooms(roomsData);
-        setProfessors(professorsData);
-        setCourses(coursesData);
-        setGroups(groupsData);
-
-        console.log('Loaded data:', {
-          rooms: roomsData.length,
-          professors: professorsData.length,
-          courses: coursesData.length,
-          groups: groupsData.length
-        });
-
-      } catch (error) {
-        console.error('Error loading initial data:', error);
-        setSnackbar({
-          open: true,
-          message: 'خطأ في تحميل البيانات الأساسية',
-          severity: 'error'
-        });
-      }
-    };
-
-    loadInitialData();
-  }, []);
-
-  // تحميل الأقسام بشكل منفصل
-  useEffect(() => {
-    const loadDepartments = async () => {
-      try {
-        const departmentsData = await getDepartments();
-        setDepartments(departmentsData);
-      } catch (error) {
-        console.error('Error loading departments:', error);
-      }
-    };
-
-    loadDepartments();
-  }, []);
-
-  // تحميل الحصص الإضافية عند تحميل الصفحة
-  useEffect(() => {
-    fetchExtraSessions();
-  }, []);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments(),
+        fetchExtraSessions()
+      ]);
+      
+      const departmentsData = await getDepartments();
+      setDepartments(departmentsData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء تحميل البيانات' });
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments, addNotification]);
 
   useEffect(() => {
-    const loadAllData = async () => {
-      try {
-        console.log('🔍 loadAllData - currentYear:', currentYear);
-        console.log('🔍 loadAllData - currentSemester:', currentSemester);
-
-        // Refresh all data when component mounts or academic year changes
-        if (currentYear && currentSemester) {
-          console.log('Loading assignments for current year/semester...');
-          console.log(`🔍 السنة الأكاديمية: ${currentYear.year_name}`);
-          console.log(`🔍 الفصل الدراسي: ${currentSemester.semester_name}`);
-
-          // Load regular assignments
-          await fetchRegularAssignments();
-          await fetchExtraSessions();
-        } else {
-          console.log('❌ currentYear أو currentSemester غير محددين في loadAllData');
-        }
-      } catch (error) {
-        console.error('Error loading data for matrix report:', error);
-      }
-    };
-
-    loadAllData();
-  }, [currentYear, currentSemester]);
+    loadData();
+  }, [loadData]);
 
   // دالة لتحميل الحصص الإضافية
-  const fetchExtraSessions = async () => {
+  const fetchExtraSessions = useCallback(async () => {
     try {
-      const sessions = await window.db.getExtraSessions();
-      console.log('📚 Loaded extra sessions:', sessions.length);
-
-      // فصل الحصص إلى قادمة ومؤرشفة
-      const upcoming = sessions.filter((s: ExtraSession) => !s.is_archived || s.is_archived === 0);
-      const archived = sessions.filter((s: ExtraSession) => s.is_archived === 1);
-
-      console.log(`✅ Upcoming sessions: ${upcoming.length}, Archived: ${archived.length}`);
-
-      setExtraSessions(upcoming); // فقط الحصص القادمة
-      setArchivedSessions(archived); // الحصص المؤرشفة
+      await fetchExtraSessionsFromStore();
     } catch (error) {
       console.error('Error fetching extra sessions:', error);
-      setSnackbar({
-        open: true,
-        message: 'خطأ في تحميل الحصص الإضافية',
-        severity: 'error'
-      });
+      addNotification({ type: 'error', message: 'خطأ في تحميل الحصص الإضافية' });
     }
-  };
+  }, [fetchExtraSessionsFromStore, addNotification]);
 
   // دالة لتنفيذ الأرشفة يدوياً
   const manualArchivePastSessions = async () => {
     try {
-      const result = await window.db.archivePastSessions();
+      const result = await archivePastSessionsInStore();
 
       if (result.error) {
-        setSnackbar({
-          open: true,
-          message: `خطأ في الأرشفة: ${result.error}`,
-          severity: 'error'
-        });
+        addNotification({ type: 'error', message: `خطأ في الأرشفة: ${result.error}` });
       } else {
-        // إعادة تحميل الحصص بعد الأرشفة
-        await fetchExtraSessions();
-
-        setSnackbar({
-          open: true,
-          message: `تم أرشفة ${result.archived} حصة منتهية بنجاح`,
-          severity: 'success'
-        });
+        addNotification({ type: 'success', message: `تم أرشفة ${result.archived} حصة منتهية بنجاح` });
       }
     } catch (error) {
       console.error('Error in manual archiving:', error);
-      setSnackbar({
-        open: true,
-        message: 'خطأ في تنفيذ الأرشفة',
-        severity: 'error'
-      });
+      addNotification({ type: 'error', message: 'خطأ في تنفيذ الأرشفة' });
     }
   };
 
@@ -713,60 +667,12 @@ export default function AvailableRooms() {
       // Get print settings for branding
       const printSettings = await window.dataUtils.getPrintSettings();
 
-      // Force load all necessary data first
-      console.log('=== Loading all necessary data for room availability matrix ===');
-
-      // Load rooms if empty
-      let currentRooms = rooms;
-      if (currentRooms.length === 0) {
-        console.log('Loading rooms...');
-        try {
-          currentRooms = await window.db.getRooms();
-          console.log('Loaded rooms:', currentRooms.length);
-        } catch (error) {
-          console.error('Error loading rooms:', error);
-          currentRooms = [];
-        }
-      }
-
-      // Load professors if empty
-      let currentProfessors = professors;
-      if (currentProfessors.length === 0) {
-        console.log('Loading professors...');
-        try {
-          currentProfessors = await window.db.getProfessors();
-          console.log('Loaded professors:', currentProfessors.length);
-        } catch (error) {
-          console.error('Error loading professors:', error);
-          currentProfessors = [];
-        }
-      }
-
-      // Load courses if empty
-      let currentCourses = courses;
-      if (currentCourses.length === 0) {
-        console.log('Loading courses...');
-        try {
-          currentCourses = await window.db.getCourses();
-          console.log('Loaded courses:', currentCourses.length);
-        } catch (error) {
-          console.error('Error loading courses:', error);
-          currentCourses = [];
-        }
-      }
-
-      // Load groups if empty
-      let currentGroups = groups;
-      if (currentGroups.length === 0) {
-        console.log('Loading groups...');
-        try {
-          currentGroups = await window.db.getGroups();
-          console.log('Loaded groups:', currentGroups.length);
-        } catch (error) {
-          console.error('Error loading groups:', error);
-          currentGroups = [];
-        }
-      }
+      // Data is already available from stores
+      const currentRooms = rooms;
+      const currentProfessors = professors;
+      const currentCourses = courses;
+      const currentGroups = groups;
+      const currentRegularAssignments = regularAssignments;
 
       // Days excluding Friday (id: 6)
       const workingDays = days.filter(day => day.id !== 6);
@@ -986,82 +892,12 @@ export default function AvailableRooms() {
       // Get print settings for branding
       const printSettings = await window.dataUtils.getPrintSettings();
 
-      // Force load all necessary data first
-      console.log('=== Loading all necessary data for matrix report ===');
-
-      // Load rooms if empty
-      let currentRooms = rooms;
-      if (currentRooms.length === 0) {
-        console.log('Loading rooms...');
-        try {
-          currentRooms = await window.db.getRooms();
-          console.log('Loaded rooms:', currentRooms.length);
-        } catch (error) {
-          console.error('Error loading rooms:', error);
-          currentRooms = [];
-        }
-      }
-
-      // Load professors if empty
-      let currentProfessors = professors;
-      if (currentProfessors.length === 0) {
-        console.log('Loading professors...');
-        try {
-          currentProfessors = await window.db.getProfessors();
-          console.log('Loaded professors:', currentProfessors.length);
-        } catch (error) {
-          console.error('Error loading professors:', error);
-          currentProfessors = [];
-        }
-      }
-
-      // Load courses if empty
-      let currentCourses = courses;
-      if (currentCourses.length === 0) {
-        console.log('Loading courses...');
-        try {
-          currentCourses = await window.db.getCourses();
-          console.log('Loaded courses:', currentCourses.length);
-        } catch (error) {
-          console.error('Error loading courses:', error);
-          currentCourses = [];
-        }
-      }
-
-      // Load groups if empty
-      let currentGroups = groups;
-      if (currentGroups.length === 0) {
-        console.log('Loading groups...');
-        try {
-          currentGroups = await window.db.getGroups();
-          console.log('Loaded groups:', currentGroups.length);
-        } catch (error) {
-          console.error('Error loading groups:', error);
-          currentGroups = [];
-        }
-      }
-
-      // Load regular assignments for current year/semester
-      let currentRegularAssignments = regularAssignments;
-      console.log('Initial regular assignments:', currentRegularAssignments.length);
-
-      // Force reload assignments if empty or if we need fresh data
-      if (currentRegularAssignments.length === 0 || !currentYear || !currentSemester) {
-        console.log('Loading fresh regular assignments...');
-        try {
-          if (currentYear && currentSemester) {
-            currentRegularAssignments = await window.db.getAssignments(
-              currentYear.year_name,
-              currentSemester.semester_name,
-              ''
-            );
-            console.log('Fresh assignments loaded:', currentRegularAssignments.length);
-          }
-        } catch (error) {
-          console.error('Error loading fresh assignments:', error);
-          currentRegularAssignments = [];
-        }
-      }
+      // Data is already available from stores
+      const currentRooms = rooms;
+      const currentProfessors = professors;
+      const currentCourses = courses;
+      const currentGroups = groups;
+      const currentRegularAssignments = regularAssignments;
 
       // Debug: Check data availability after loading
       console.log('=== DEBUG: Daily Matrix Report Data ===');
@@ -1946,25 +1782,23 @@ export default function AvailableRooms() {
 
     try {
       console.log('Refreshing data before validation...');
-      const [r, g, p, c] = await Promise.all([
-        window.db.getRooms(),
-        window.db.getGroups(),
-        window.db.getProfessors(),
-        window.db.getCourses()
+      await Promise.all([
+        fetchRooms(),
+        fetchGroups(),
+        fetchProfessors(),
+        fetchCourses()
       ]);
-      freshRooms = r;
-      freshGroups = g;
-      freshProfessors = p;
-      freshCourses = c;
-
-      // Update local state to reflect reality
-      setRooms(r);
-      setGroups(g);
-      setProfessors(p);
-      setCourses(c);
+      freshRooms = rooms;
+      freshGroups = groups;
+      freshProfessors = professors;
+      freshCourses = courses;
     } catch (e) {
       console.error('Failed to refresh data before submit:', e);
       // Continue with local state if fetch fails (fallback)
+      freshRooms = rooms;
+      freshGroups = groups;
+      freshProfessors = professors;
+      freshCourses = courses;
     }
 
     // Pre-validate references to prevent Foreign Key errors
@@ -2055,44 +1889,14 @@ export default function AvailableRooms() {
           description: description
         };
 
-        await window.db.updateExtraSession(currentSession.id, sessionData);
-
-        // Mise à jour dans l'état local
-        setExtraSessions(prev =>
-          prev.map(s => s.id === currentSession.id ? {
-            id: s.id,
-            room_id: selectedRoom as number,
-            professor_id: selectedProfessor as number,
-            group_id: selectedGroup as number,
-            course_id: selectedCourse as number,
-            session_date: formattedDate,
-            start_time: actualStartTime,
-            end_time: actualEndTime,
-            session_type: sessionType,
-            description: description,
-            professor_name: professors.find(p => p.id === selectedProfessor)?.name,
-            course_name: courses.find(c => c.id === selectedCourse)?.name,
-            group_name: groups.find(g => g.id === selectedGroup)?.name,
-            room_name: rooms.find(r => r.id === selectedRoom)?.name
-          } : s)
-        );
-
-        setSnackbar({
-          open: true,
-          message: "La séance a été mise à jour avec succès",
-          severity: 'success'
-        });
+        await updateExtraSession(currentSession.id, sessionData);
+        addNotification({ type: 'success', message: 'تم تحديث الحصة بنجاح' });
       } else {
         // Logic for creating sessions
         const roomsToBook = selectedRoomIds.length > 0 ? selectedRoomIds : [selectedRoom as number];
         const groupsToBook = ((sessionType === 'semester_exam' || sessionType === 'exam') && selectedGroupIds.length > 0)
           ? selectedGroupIds
           : [selectedGroup as number];
-
-        // We will create a session for every combination of (Room, Group)
-        // Scenario 1: Split (1 Group, N Rooms) -> Loop Rooms, use single Group
-        // Scenario 2: Merge (N Groups, 1 Room) -> Loop Groups, use single Room
-        // Scenario 3: N Groups, M Rooms -> Cross product (Create N*M sessions)
 
         const promises = [];
 
@@ -2113,24 +1917,18 @@ export default function AvailableRooms() {
               session_date: formattedDate,
               start_time: actualStartTime,
               end_time: actualEndTime,
-              session_type: sessionType as any, // Cast for new type
+              session_type: sessionType as any,
               description: description,
               is_archived: 0
             };
-            promises.push(window.db.createExtraSession(newSession));
+            promises.push(addExtraSession(newSession));
           }
         }
 
         await Promise.all(promises);
-
-        setSnackbar({
-          open: true,
-          message: 'تم إضافة الحصة/الحصص بنجاح',
-          severity: 'success'
-        });
+        addNotification({ type: 'success', message: 'تم إضافة الحصة/الحصص بنجاح' });
 
         handleCloseDialog();
-        fetchExtraSessions();
         // Clear selections
         setSelectedRoomIds([]);
         setSelectedGroupIds([]);
@@ -2147,11 +1945,7 @@ export default function AvailableRooms() {
         errorMessage = 'خطأ في البيانات: يبدو أنك تحاول استخدام قاعة أو أستاذ أو فوج تم حذفه. يرجى تحديث الصفحة والمحاولة مرة أخرى.';
       }
 
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: 'error'
-      });
+      addNotification({ type: 'error', message: errorMessage });
     }
   };
 
@@ -2159,23 +1953,11 @@ export default function AvailableRooms() {
   const handleDeleteSession = async (sessionId: number) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer cette séance ?')) {
       try {
-        await window.db.deleteExtraSession(sessionId);
-
-        // Mise à jour de l'état local
-        setExtraSessions(prev => prev.filter(s => s.id !== sessionId));
-
-        setSnackbar({
-          open: true,
-          message: "La séance a été supprimée avec succès",
-          severity: 'success'
-        });
+        await deleteExtraSession(sessionId);
+        addNotification({ type: 'success', message: 'تم حذف الحصة بنجاح' });
       } catch (error) {
         console.error('Erreur lors de la suppression de la séance:', error);
-        setSnackbar({
-          open: true,
-          message: `Une erreur est survenue: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
-          severity: 'error'
-        });
+        addNotification({ type: 'error', message: 'حدث خطأ أثناء حذف الحصة' });
       }
     }
   };
@@ -2188,41 +1970,9 @@ export default function AvailableRooms() {
   // Fonction pour récupérer les assignations régulières
   const fetchRegularAssignments = async () => {
     try {
-      console.log('🔍 fetchRegularAssignments - currentYear:', currentYear);
-      console.log('🔍 fetchRegularAssignments - currentSemester:', currentSemester);
-
-      if (currentYear && currentSemester) {
-        console.log(`🔍 جلب التكليفات العادية للسنة: ${currentYear.year_name}, الفصل: ${currentSemester.semester_name}`);
-        const assignments = await window.db.getAssignments(
-          currentYear.year_name,
-          currentSemester.semester_name,
-          ''
-        );
-        setRegularAssignments(assignments);
-        console.log(`✅ تم جلب ${assignments.length} تكليف عادي`);
-
-        // تسجيل تفاصيل التكليفات العادية للقاعة 10 في الأحد
-        const room10SundayAssignments = assignments.filter(assignment =>
-          assignment.room_id === 11 && assignment.day_of_week === 1
-        );
-        console.log(`🔍 التكليفات العادية للقاعة 10 في الأحد: ${room10SundayAssignments.length}`);
-        if (room10SundayAssignments.length > 0) {
-          console.log('📋 تفاصيل التكليفات العادية للقاعة 10 في الأحد:');
-          room10SundayAssignments.forEach((assignment, index) => {
-            console.log(`  ${index + 1}. التوقيت: ${assignment.start_time} - ${assignment.end_time}`);
-            console.log(`     السنة الأكاديمية: ${assignment.academic_year}`);
-            console.log(`     الفصل الدراسي: ${assignment.semester}`);
-            console.log('');
-          });
-        }
-      } else {
-        console.log('❌ currentYear أو currentSemester غير محددين');
-        setRegularAssignments([]);
-      }
+      await fetchAssignments();
     } catch (err) {
       console.error('Erreur lors de la récupération des assignations régulières:', err);
-      // Continuer même en cas d'erreur
-      setRegularAssignments([]);
     }
   };
 

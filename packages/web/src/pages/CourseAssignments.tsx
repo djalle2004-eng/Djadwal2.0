@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import * as XLSX from 'xlsx';
-import { AcademicYearContext } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
 import { 
   printContent, 
@@ -232,26 +237,43 @@ const exportToExcel = (assignmentsData: any[]) => {
 
 const CourseAssignments: React.FC = () => {
   const { can } = usePermissions();
-  const [assignments, setAssignments] = useState<AssignmentWithDetails[]>([]);
-  const [professors, setProfessors] = useState<FetchedProfessor[]>([]);
-  const [courses, setCourses] = useState<FetchedCourse[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [rooms, setRooms] = useState<FetchedRoom[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, departments, fetchGroups, fetchDepartments 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading: loading, 
+    error: scheduleError, 
+    fetchAssignments, 
+    addAssignment: storeAddAssignment, 
+    updateAssignment: storeUpdateAssignment, 
+    deleteAssignment: storeDeleteAssignment 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
+  // Local State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [departments, setDepartments] = useState<any[]>([]);
   const [filteredGroups, setFilteredGroups] = useState<any[]>([]);
-  const [filteredAssignments, setFilteredAssignments] = useState<AssignmentWithDetails[]>([]);
   const [selectedProfessor, setSelectedProfessor] = useState<string>('');
   const [selectedDepartment, setSelectedDepartment] = useState<number>(0);
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [selectedGroup, setSelectedGroup] = useState<number>(0);
   
-  const academicYearContext = useContext(AcademicYearContext);
-  const currentYear = academicYearContext?.currentYear || null;
-  const currentSemester = academicYearContext?.currentSemester || null;
-  
-  // Initialize form data with current academic year and semester
+  // Initialize form data
   const [formData, setFormData] = useState<Assignment>({
     professor_id: 0,
     course_id: 0,
@@ -265,12 +287,12 @@ const CourseAssignments: React.FC = () => {
     group_specialization: '',
     department_id: 0
   });
-  const [error, setError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<AssignmentWithDetails | null>(null);
   const [courseSearchTerm, setCourseSearchTerm] = useState('');
-  const [filteredCourses, setFilteredCourses] = useState<FetchedCourse[]>([]);
+  const [filteredCoursesSearch, setFilteredCoursesSearch] = useState<FetchedCourse[]>([]);
   const [isCourseDropdownOpen, setIsCourseDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
@@ -280,129 +302,30 @@ const CourseAssignments: React.FC = () => {
   const [conflictCheckResult, setConflictCheckResult] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const { getAssignments, addAssignment, updateAssignment, deleteAssignment } = useAssignments();
-
   // Memoize the fetchData function to prevent unnecessary re-renders
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Fetch all necessary data in parallel
-      const [professorsData, coursesData, groupsData, roomsData, departmentsData] = await Promise.all([
-        window.db.getProfessors(),
-        window.db.getCourses(),
-        window.db.getGroups(),
-        window.db.getRooms(),
-        window.db.getDepartments()
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchDepartments(),
+        fetchAssignments()
       ]);
-      
-      setProfessors(professorsData);
-      setCourses(coursesData);
-      setGroups(groupsData);
-      setRooms(roomsData);
-      setDepartments(departmentsData);
-
-      // Get the current academic year and semester from context
-      const yearName = currentYear ? currentYear.year_name : null;
-      const semesterName = currentSemester ? currentSemester.semester_name : null;
-      
-      console.log('CourseAssignments - Current context values:', {
-        currentYear: currentYear,
-        currentSemester: currentSemester,
-        yearName,
-        semesterName
-      });
-      
-      if (!yearName || !semesterName) {
-        console.warn('No active academic year or semester selected');
-        // You might want to show a message to the user here
-      }
-      
-      // Use the current academic year and semester for fetching assignments
-      // استدعاء قاعدة البيانات مباشرة للتأكد من الفلترة
-      const assignmentsData = await window.db.getAssignments(yearName, semesterName);
-      
-      console.log('CourseAssignments - Fetching assignments with filters:', {
-        yearName,
-        semesterName,
-        totalAssignments: assignmentsData.length,
-        sampleAssignment: assignmentsData.length > 0 ? {
-          academic_year: assignmentsData[0].academic_year,
-          semester: assignmentsData[0].semester
-        } : null
-      });
-      
-      // Debug: Log a sample assignment to see its structure
-      if (assignmentsData.length > 0) {
-        console.log('Sample assignment structure:', assignmentsData[0]);
-      }
-      
-      // Process assignments to include names instead of just IDs
-      const assignmentsWithDetails = assignmentsData.map((assignment: any) => {
-        const professor = professorsData.find((p: any) => p.id === assignment.professor_id);
-        const course = coursesData.find((c: any) => c.id === assignment.course_id);
-        const group = groupsData.find((g: any) => g.id === assignment.group_id);
-        const room = roomsData.find((r: any) => r.id === assignment.room_id);
-        const day = DAYS_OF_WEEK.find(d => d.id === assignment.day_of_week);
-        
-        return {
-          ...assignment,
-          professor_name: professor ? professor.name : 'غير معروف',
-          course_name: course ? `${course.name} (${course.code})` : 'غير معروف',
-          group_name: group ? group.name : 'غير معروف',
-          room_name: room ? room.name : 'غير معروف',
-          day_name: day ? day.name : 'غير معروف',
-          time: `${assignment.start_time} - ${assignment.end_time}`
-        } as AssignmentWithDetails;
-      });
-      
-      setAssignments(assignmentsWithDetails);
     } catch (error) {
       console.error('Error fetching data:', error);
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('حدث خطأ أثناء جلب البيانات');
-      }
-    } finally {
-      setLoading(false);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     }
-  }, [currentYear, currentSemester, getAssignments]);
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchDepartments, fetchAssignments]);
 
-  // Use a ref to track if we've already done the initial fetch
   const initialFetchDone = useRef(false);
 
-  // Only fetch data when the component mounts or when academic year/semester changes
   useEffect(() => {
-    // Skip if we've already fetched data and nothing has changed
-    if (initialFetchDone.current && 
-        assignments.length > 0 && 
-        !assignments.some(a => 
-          a.academic_year !== (currentYear?.year_name || '') || 
-          a.semester !== (currentSemester?.semester_name || '')
-        )) {
-      return;
-    }
-
-    fetchData();
-    initialFetchDone.current = true;
-  }, [currentYear, currentSemester]);
-
-  // Set up subscription to assignment changes (add, update, delete)
-  useEffect(() => {
-    // Function to handle assignment changes from other components
-    const handleAssignmentChange = () => {
-      // Only refresh data if necessary
+    if (!initialFetchDone.current) {
       fetchData();
-    };
-
-    // Subscribe to assignment changes
-    window.addEventListener('assignment-changed', handleAssignmentChange);
-    
-    return () => {
-      window.removeEventListener('assignment-changed', handleAssignmentChange);
-    };
+      initialFetchDone.current = true;
+    }
   }, [fetchData]);
 
   // Utility function to get unique specializations from groups
@@ -542,18 +465,11 @@ const CourseAssignments: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    
-    // Validate form before submission
-    if (!validateForm()) {
-      return;
-    }
-    
-    setLoading(true);
+    if (!validateForm()) return;
     
     try {
       if (editingAssignment) {
-        // Update existing assignment
-        await updateAssignment(editingAssignment.id, {
+        await storeUpdateAssignment(editingAssignment.id, {
           professor_id: formData.professor_id,
           course_id: formData.course_id,
           group_id: formData.group_id,
@@ -564,9 +480,9 @@ const CourseAssignments: React.FC = () => {
           academic_year: currentYear?.year_name || '',
           semester: currentSemester?.semester_name || ''
         });
+        addNotification({ type: 'success', message: 'تم تحديث التكليف بنجاح' });
       } else {
-        // Add new assignment
-        await addAssignment({
+        await storeAddAssignment({
           professor_id: formData.professor_id,
           course_id: formData.course_id,
           group_id: formData.group_id,
@@ -577,9 +493,9 @@ const CourseAssignments: React.FC = () => {
           academic_year: currentYear?.year_name || '',
           semester: currentSemester?.semester_name || ''
         });
+        addNotification({ type: 'success', message: 'تم إضافة التكليف بنجاح' });
       }
       
-      // Reset form
       setFormData({
         professor_id: 0,
         course_id: 0,
@@ -594,16 +510,9 @@ const CourseAssignments: React.FC = () => {
       
       setIsModalOpen(false);
       setEditingAssignment(null);
-      await fetchData();
     } catch (error) {
       console.error('فشل إضافة/تعديل التكليف:', error);
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('خطأ غير معروف');
-      }
-    } finally {
-      setLoading(false);
+      addNotification({ type: 'error', message: error instanceof Error ? error.message : 'خطأ غير معروف' });
     }
   };
 
@@ -625,32 +534,22 @@ const CourseAssignments: React.FC = () => {
 
   const confirmDeleteAssignment = async (id: number) => {
     if (window.confirm('هل أنت متأكد من حذف هذا التكليف؟')) {
-      setLoading(true);
       try {
-        await deleteAssignment(id);
-        await fetchData();
+        await storeDeleteAssignment(id);
+        addNotification({ type: 'success', message: 'تم حذف التكليف بنجاح' });
       } catch (error) {
         console.error('فشل حذف التكليف:', error);
-        if (error instanceof Error) {
-          setError(error.message);
-        } else {
-          setError('خطأ غير معروف');
-        }
-      } finally {
-        setLoading(false);
+        addNotification({ type: 'error', message: error instanceof Error ? error.message : 'خطأ غير معروف' });
       }
     }
   };
 
   const validateForm = () => {
-    let isValid = true;
-    
     if (!formData.professor_id || !formData.course_id || !formData.group_id || !formData.room_id || !formData.day_of_week || !formData.start_time || !formData.end_time) {
-      setError('جميع الحقول مطلوبة');
-      isValid = false;
+      addNotification({ type: 'error', message: 'جميع الحقول مطلوبة' });
+      return false;
     }
-    
-    return isValid;
+    return true;
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -723,8 +622,8 @@ const CourseAssignments: React.FC = () => {
             if (!rooms.some(r => r.id === assignmentData.room_id)) throw new Error(`Salle ID ${assignmentData.room_id} non trouvé.`);
 
 
-            // Utiliser la fonction addAssignment du contexte
-            await addAssignment(assignmentData);
+            // Utiliser la fonction storeAddAssignment du store
+            await storeAddAssignment(assignmentData);
             successful++;
           } catch (error) {
             console.error('فشل استيراد صف:', error, row);
@@ -735,13 +634,9 @@ const CourseAssignments: React.FC = () => {
 
         let message = `تم استيراد ${successful} تعيين بنجاح.`;
         if (failed > 0) {
-          message += `\nفشل استيراد ${failed} تعيين.\nErreurs:\n${errors.join('\n\n')}`;
+          message += `\nفشل استيراد ${failed} تعيين.`;
         }
-        alert(message);
-
-        // Pas besoin de fetchData() ici car le contexte AssignmentContext
-        // devrait se mettre à jour automatiquement après addAssignment
-        // et déclencher un re-render.
+        addNotification({ type: failed > 0 ? 'warning' : 'success', message });
 
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -750,8 +645,7 @@ const CourseAssignments: React.FC = () => {
 
       reader.onerror = (error) => {
         console.error("Erreur de lecture du fichier:", error);
-        setError("Impossible de lire le fichier.");
-        setLoading(false);
+        addNotification({ type: 'error', message: 'Impossible de lire le fichier.' });
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -760,17 +654,11 @@ const CourseAssignments: React.FC = () => {
       reader.readAsArrayBuffer(file);
     } catch (error) {
       console.error('خطأ في استيراد الملف:', error);
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError('خطأ غير معروف أثناء معالجة الملف.');
-      }
-      setLoading(false);
+      addNotification({ type: 'error', message: error instanceof Error ? error.message : 'خطأ غير معروف أثناء معالجة الملف.' });
       if (fileInputRef.current) {
           fileInputRef.current.value = '';
       }
     }
-    // Ne mettez pas setLoading(false) ici car reader.onload est asynchrone
   };
 
   const columns: GridColDef[] = [

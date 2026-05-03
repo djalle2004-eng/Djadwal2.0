@@ -1,6 +1,10 @@
-import { useState, useEffect, useContext } from 'react';
-import { AcademicYearContext } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 import { usePermissions } from '../hooks/usePermissions';
 import { ArrowLeftRight, Calendar, Clock, User, BookOpen, MapPin, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
 
@@ -76,14 +80,31 @@ export default function SessionSwap() {
   // الصلاحيات
   const { can } = usePermissions();
   
-  // الحالة المحلية
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [filteredSessions, setFilteredSessions] = useState<SessionInfo[]>([]);
-  
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, fetchGroups 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments, 
+    isLoading, 
+    error: scheduleError, 
+    fetchAssignments, 
+    updateAssignment 
+  } = useScheduleStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   // حالات التبديل
   const [selectedSession1, setSelectedSession1] = useState<SessionInfo | null>(null);
   const [selectedSession2, setSelectedSession2] = useState<SessionInfo | null>(null);
@@ -94,72 +115,30 @@ export default function SessionSwap() {
   const [filterCourse, setFilterCourse] = useState<string>('');
   const [filterDay, setFilterDay] = useState<string>('');
   const [filterTime, setFilterTime] = useState<string>('');
-  
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // الحصول على السياق الأكاديمي
-  const academicYearContext = useContext(AcademicYearContext);
-  const currentYear = academicYearContext?.currentYear;
-  const currentSemester = academicYearContext?.currentSemester;
-
-  // استخدام السياق للتعامل مع التكاليف
-  const { assignments: contextAssignments, refreshAssignments, updateAssignment } = useAssignments();
-
-  // تحميل البيانات عند بدء التشغيل
-  useEffect(() => {
-    if (currentYear && currentSemester) {
-      fetchData();
-    }
-  }, [currentYear, currentSemester]);
-
-  // تحديث الجلسات عند تغيير التكاليف
-  useEffect(() => {
-    if (contextAssignments.length > 0) {
-      prepareSessions();
-    }
-  }, [contextAssignments, professors, courses, rooms, groups]);
-
-  // تطبيق التصفية
-  useEffect(() => {
-    applyFilters();
-  }, [sessions, filterProfessor, filterCourse, filterDay, filterTime]);
-
-  // جلب البيانات من قاعدة البيانات
-  const fetchData = async () => {
+  // تحميل البيانات
+  const fetchData = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      const [fetchedGroups, fetchedCourses, fetchedProfessors, fetchedRooms] = await Promise.all([
-        window.db.getGroups(),
-        window.db.getCourses(),
-        window.db.getProfessors(),
-        window.db.getRooms()
+      await Promise.all([
+        fetchProfessors(),
+        fetchCourses(),
+        fetchGroups(),
+        fetchRooms(),
+        fetchAssignments()
       ]);
-
-      setGroups(fetchedGroups);
-      setCourses(fetchedCourses);
-      setProfessors(fetchedProfessors);
-      setRooms(fetchedRooms);
-
-      await refreshAssignments();
     } catch (error) {
-      console.error("Error fetching data:", error);
-      setError("خطأ في تحميل البيانات");
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching data:', error);
+      addNotification({ type: 'error', message: 'حدث خطأ أثناء جلب البيانات' });
     }
-  };
+  }, [fetchProfessors, fetchCourses, fetchGroups, fetchRooms, fetchAssignments]);
 
-  // تحضير بيانات الجلسات
-  const prepareSessions = () => {
-    const yearSemesterFilteredAssignments = contextAssignments.filter(assignment => 
-      (assignment.academic_year === currentYear?.year_name || !assignment.academic_year) &&
-      (assignment.semester === currentSemester?.semester_name || !assignment.semester)
-    );
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    const sessionsWithDetails: SessionInfo[] = yearSemesterFilteredAssignments.map(assignment => {
+  const sessionsWithDetails = useMemo(() => {
+    return assignments.map(assignment => {
       const professor = professors.find(p => p.id === assignment.professor_id);
       const course = courses.find(c => c.id === assignment.course_id);
       const group = groups.find(g => g.id === assignment.group_id);
@@ -173,13 +152,11 @@ export default function SessionSwap() {
         room_name: room?.name || 'غير محدد'
       };
     });
-
-    setSessions(sessionsWithDetails);
-  };
+  }, [assignments, professors, courses, groups, rooms]);
 
   // تطبيق التصفية
-  const applyFilters = () => {
-    let filtered = sessions;
+  const filteredSessions = useMemo(() => {
+    let filtered = sessionsWithDetails;
 
     if (filterProfessor) {
       filtered = filtered.filter(session => 
@@ -208,15 +185,15 @@ export default function SessionSwap() {
       }
     }
 
-    setFilteredSessions(filtered);
-  };
+    return filtered;
+  }, [sessionsWithDetails, filterProfessor, filterCourse, filterDay, filterTime]);
 
   // التحقق من إمكانية التبديل
   const canSwapSessions = (session1: SessionInfo, session2: SessionInfo): { canSwap: boolean; conflicts: string[] } => {
     const conflicts: string[] = [];
 
     // الحصول على الجلسات الأخرى (باستثناء الجلستين المحددتين للتبديل)
-    const otherSessions = sessions.filter(s => s.id !== session1.id && s.id !== session2.id);
+    const otherSessions = sessionsWithDetails.filter(s => s.id !== session1.id && s.id !== session2.id);
 
     // التحقق من أن الأستاذ ليس "غير محدد" قبل فحص التعارض
     const isUnspecifiedProfessor = (professorName: string | undefined) => {
@@ -335,13 +312,12 @@ export default function SessionSwap() {
         await updateAssignment(selectedSession1.id, updatedSession1);
         await updateAssignment(selectedSession2.id, updatedSession2);
 
-        // تحديث البيانات
-        await refreshAssignments();
-
         setSwapResult({
           success: true,
           message: `تم تبديل الأساتذة والمقاييس بنجاح!\n• ${selectedSession2.professor_name} سيدرس ${selectedSession2.course_name} للمجموعة ${selectedSession1.group_name}\n• ${selectedSession1.professor_name} سيدرس ${selectedSession1.course_name} للمجموعة ${selectedSession2.group_name}`
         });
+
+        addNotification({ type: 'success', message: 'تم تبديل الحصص بنجاح' });
 
         // إعادة تعيين الاختيارات
         setSelectedSession1(null);
@@ -604,9 +580,9 @@ export default function SessionSwap() {
           قائمة الحصص ({filteredSessions.length} حصة)
         </h3>
         
-        {error && (
+        {scheduleError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+            {scheduleError}
           </div>
         )}
 

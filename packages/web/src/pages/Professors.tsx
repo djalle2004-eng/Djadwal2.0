@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
-import { getProfessors, addProfessor, updateProfessor, deleteProfessor, deleteAllProfessors } from '../services/db';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 
 interface Professor {
   id: number;
@@ -104,8 +105,18 @@ const academicTitles = [
 
 export default function Professors() {
   const { can } = usePermissions();
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    professors, 
+    isLoading: loading, 
+    error, 
+    fetchProfessors, 
+    addProfessor: storeAddProfessor,
+    updateProfessor: storeUpdateProfessor,
+    deleteProfessor: storeDeleteProfessor,
+    deleteAllProfessors: storeDeleteAllProfessors
+  } = useProfessorsStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProfessor, setEditingProfessor] = useState<Professor | null>(null);
   const [formData, setFormData] = useState<ProfessorFormData>({
@@ -118,7 +129,6 @@ export default function Professors() {
     phone: '',
     title: ''
   });
-  const [error, setError] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -127,42 +137,7 @@ export default function Professors() {
 
   useEffect(() => {
     fetchProfessors();
-  }, []);
-
-  const fetchProfessors = async () => {
-    setLoading(true);
-    try {
-      console.log("Récupération des professeurs...");
-      const professorsData = await getProfessors();
-      console.log("Données brutes des professeurs reçues:", JSON.stringify(professorsData));
-      
-      const adaptedProfessors: Professor[] = professorsData.map((prof: any) => {
-        console.log("Traitement du professeur:", prof);
-        const adapted = {
-          id: prof.id,
-          first_name: prof.first_name || '',
-          last_name: prof.last_name || '',
-          academic_title: prof.academic_title || '',
-          specialization: prof.specialization || '',
-          weekly_hours: prof.weekly_hours,
-          email: prof.email,
-          phone: prof.phone || '',
-          title: prof.title || '', 
-          created_at: prof.created_at
-        };
-        console.log("Professeur adapté:", adapted);
-        return adapted;
-      });
-      
-      console.log("Tous les professeurs adaptés:", adaptedProfessors);
-      setProfessors(adaptedProfessors);
-    } catch (error) {
-      console.error('Error fetching professors:', error);
-      setError('Failed to fetch professors');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fetchProfessors]);
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
@@ -210,16 +185,13 @@ export default function Professors() {
     
     try {
       if (editingProfessor) {
-        // Update existing professor
-        await updateProfessor(editingProfessor.id, formData);
-        console.log('Professeur mis à jour avec succès');
+        await storeUpdateProfessor(editingProfessor.id, formData);
+        addNotification({ type: 'success', message: 'تم تحديث بيانات الأستاذ بنجاح' });
       } else {
-        // Add new professor
-        await addProfessor(formData);
-        console.log('Professeur ajouté avec succès');
+        await storeAddProfessor(formData);
+        addNotification({ type: 'success', message: 'تم إضافة الأستاذ بنجاح' });
       }
       
-      // Reset form and fetch updated list
       setFormData({
         first_name: '',
         last_name: '',
@@ -232,14 +204,9 @@ export default function Professors() {
       });
       setEditingProfessor(null);
       setIsModalOpen(false);
-      
-      // Force reload of professors data
-      await fetchProfessors();
     } catch (err) {
       console.error('Error saving professor:', err);
-      setError('Failed to save professor');
-    } finally {
-      setLoading(false);
+      addNotification({ type: 'error', message: 'فشل في حفظ بيانات الأستاذ' });
     }
   };
 
@@ -259,31 +226,25 @@ export default function Professors() {
   };
 
   const handleDelete = async (professor: Professor) => {
-    if (window.confirm(`Are you sure you want to delete ${professor.first_name} ${professor.last_name}?`)) {
+    if (window.confirm(`هل أنت متأكد من حذف ${professor.first_name} ${professor.last_name}؟`)) {
       try {
-        await deleteProfessor(professor.id);
-        // Force reload of professors data
-        await fetchProfessors();
+        await storeDeleteProfessor(professor.id);
+        addNotification({ type: 'success', message: 'تم حذف الأستاذ بنجاح' });
       } catch (err) {
         console.error('Error deleting professor:', err);
-        setError('Failed to delete professor');
+        addNotification({ type: 'error', message: 'فشل في حذف الأستاذ' });
       }
     }
   };
 
   const handleDeleteAll = async () => {
-    if (window.confirm('Are you sure you want to delete ALL professors? This action cannot be undone!')) {
+    if (window.confirm('هل أنت متأكد من حذف جميع الأساتذة؟ لا يمكن التراجع عن هذا الإجراء!')) {
       try {
-        setLoading(true);
-        await deleteAllProfessors();
-        // Reload the empty list
-        await fetchProfessors();
-        setError(null);
+        await storeDeleteAllProfessors();
+        addNotification({ type: 'success', message: 'تم حذف جميع الأساتذة بنجاح' });
       } catch (err) {
         console.error('Error deleting all professors:', err);
-        setError('Failed to delete all professors');
-      } finally {
-        setLoading(false);
+        addNotification({ type: 'error', message: 'فشل في حذف جميع الأساتذة' });
       }
     }
   };
@@ -407,10 +368,9 @@ export default function Professors() {
         console.log('Adding professor:', professor);
         
         try {
-          await addProfessor(professor);
+          await storeAddProfessor(professor);
         } catch (err) {
           console.error('Error adding professor during import:', err);
-          // Continue with next record even if this one failed
         }
         
         processed++;

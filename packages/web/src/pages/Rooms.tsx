@@ -1,25 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { read, utils, writeFile } from 'xlsx';
 import { usePermissions } from '../hooks/usePermissions';
-// تعليق استيرادات Firebase
-// import { db } from '../lib/firebase';
-// import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { read, utils, writeFile } from 'xlsx';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 
-// استخدام نفس واجهة Room المعرفة في database.d.ts
 interface Room {
   id: number;
   name: string;
-  capacity?: number;
-  created_at?: string;
+  capacity: number;
 }
 
-// واجهة نموذج الإدخال
 interface RoomFormData {
   name: string;
   capacity: number;
 }
 
-// واجهة أخطاء النموذج
 interface FormErrors {
   name?: string;
   capacity?: string;
@@ -27,33 +22,28 @@ interface FormErrors {
 
 export default function Rooms() {
   const { can } = usePermissions();
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    rooms, 
+    isLoading: loading, 
+    error: storeError, 
+    fetchRooms, 
+    addRoom: storeAddRoom,
+    updateRoom: storeUpdateRoom,
+    deleteRoom: storeDeleteRoom
+  } = useRoomsStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [formData, setFormData] = useState<RoomFormData>({
     name: '',
     capacity: 0
   });
-  const [error, setError] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     fetchRooms();
-  }, []);
-
-  const fetchRooms = async () => {
-    try {
-      // استخدام SQLite بدلاً من Firebase
-      const roomsData = await window.db.getRooms();
-      setRooms(roomsData);
-    } catch (error) {
-      console.error('Error fetching rooms:', error);
-      setError('Failed to fetch rooms');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fetchRooms]);
 
   const validateForm = (): FormErrors => {
     const errors: FormErrors = {};
@@ -94,18 +84,11 @@ export default function Rooms() {
     if (Object.keys(errors).length === 0) {
       try {
         if (editingRoom) {
-          // تحديث البيانات باستخدام SQLite
-          await window.db.updateRoom(
-            editingRoom.id, 
-            formData.name, 
-            formData.capacity
-          );
+          await storeUpdateRoom(editingRoom.id, formData);
+          addNotification({ type: 'success', message: 'تم تحديث القاعة بنجاح' });
         } else {
-          // إضافة بيانات جديدة باستخدام SQLite
-          await window.db.addRoom(
-            formData.name,
-            formData.capacity
-          );
+          await storeAddRoom(formData);
+          addNotification({ type: 'success', message: 'تم إضافة القاعة بنجاح' });
         }
 
         setFormData({
@@ -114,23 +97,21 @@ export default function Rooms() {
         });
         setEditingRoom(null);
         setIsModalOpen(false);
-        fetchRooms();
       } catch (error) {
         console.error('Error saving room:', error);
-        setError('Failed to save room');
+        addNotification({ type: 'error', message: 'فشل في حفظ بيانات القاعة' });
       }
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this room?')) {
+    if (window.confirm('هل أنت متأكد من حذف هذه القاعة؟')) {
       try {
-        // حذف البيانات باستخدام SQLite
-        await window.db.deleteRoom(id);
-        fetchRooms();
+        await storeDeleteRoom(id);
+        addNotification({ type: 'success', message: 'تم حذف القاعة بنجاح' });
       } catch (error) {
         console.error('Error deleting room:', error);
-        setError('Failed to delete room');
+        addNotification({ type: 'error', message: 'فشل في حذف القاعة' });
       }
     }
   };
@@ -168,37 +149,21 @@ export default function Rooms() {
             capacity: Number(row['Capacity']) || 0
           };
 
-          // Validate required fields
-          if (!roomData.name) {
-            throw new Error('Name is a required field');
-          }
+          if (!roomData.name) continue;
 
-          // استخدام SQLite للتحقق من وجود الغرفة
-          const roomsData = await window.db.getRooms();
-          const existingRoom = roomsData.find(r => r.name === roomData.name);
+          const existingRoom = rooms.find(r => r.name === roomData.name);
 
           if (existingRoom) {
-            // تحديث الغرفة الموجودة
-            await window.db.updateRoom(
-              existingRoom.id,
-              roomData.name,
-              roomData.capacity
-            );
+            await storeUpdateRoom(existingRoom.id, roomData);
           } else {
-            // إضافة غرفة جديدة
-            await window.db.addRoom(
-              roomData.name,
-              roomData.capacity
-            );
+            await storeAddRoom(roomData);
           }
         }
 
-        // Refresh the rooms list
-        fetchRooms();
-        alert('Rooms imported successfully!');
+        addNotification({ type: 'success', message: 'تم استيراد القاعات بنجاح' });
       } catch (err) {
         console.error('Error importing rooms:', err);
-        alert(err instanceof Error ? err.message : 'Error importing rooms. Please check the file format and try again.');
+        addNotification({ type: 'error', message: 'فشل في استيراد القاعات' });
       }
     };
 

@@ -21,6 +21,7 @@ interface ProfessorsState {
   addProfessor: (professor: Partial<Professor>) => Promise<void>;
   updateProfessor: (id: number, professor: Partial<Professor>) => Promise<void>;
   deleteProfessor: (id: number) => Promise<void>;
+  deleteAllProfessors: () => Promise<void>;
 }
 
 export const useProfessorsStore = create<ProfessorsState>()(
@@ -76,6 +77,18 @@ export const useProfessorsStore = create<ProfessorsState>()(
           await window.db.deleteProfessor(id);
           set((state) => {
             state.professors = state.professors.filter(p => p.id !== id);
+          });
+        } catch (error: any) {
+          set((state) => { state.error = error.message; });
+          throw error;
+        }
+      },
+
+      deleteAllProfessors: async () => {
+        try {
+          await window.db.deleteAllProfessors();
+          set((state) => {
+            state.professors = [];
           });
         } catch (error: any) {
           set((state) => { state.error = error.message; });

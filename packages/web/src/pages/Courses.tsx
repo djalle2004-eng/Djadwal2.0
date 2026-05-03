@@ -4,7 +4,8 @@ import { read, utils, writeFile } from 'xlsx';
 import { Search, ChevronUp, ChevronDown } from 'lucide-react';
 // import { db } from '../lib/firebase';
 // import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { getCourses, addCourse, updateCourse, deleteCourse } from '../services/courseService';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
 
 interface Course {
   id: number;
@@ -41,8 +42,17 @@ type SortDirection = 'asc' | 'desc';
 
 export default function Courses() {
   const { can } = usePermissions();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    courses, 
+    isLoading: loading, 
+    error: storeError, 
+    fetchCourses, 
+    addCourse: storeAddCourse,
+    updateCourse: storeUpdateCourse,
+    deleteCourse: storeDeleteCourse
+  } = useCoursesStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [formData, setFormData] = useState<CourseFormData>({
@@ -64,21 +74,7 @@ export default function Courses() {
 
   useEffect(() => {
     fetchCourses();
-  }, []);
-
-  const fetchCourses = async () => {
-    setLoading(true);
-    try {
-      const coursesData = await getCourses();
-      setCourses(coursesData);
-      setError(null);
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-      setError('فشل في تحميل المواد');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [fetchCourses]);
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
@@ -130,17 +126,13 @@ export default function Courses() {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    setError(null);
-
     try {
       if (editingCourse) {
-        // تحديث مادة موجودة
-        const updatedCourse = await updateCourse(editingCourse.id, formData);
-        setCourses(courses.map(c => c.id === editingCourse.id ? updatedCourse : c));
+        await storeUpdateCourse(editingCourse.id, formData);
+        addNotification({ type: 'success', message: 'تم تحديث المادة بنجاح' });
       } else {
-        // إضافة مادة جديدة
-        const newCourse = await addCourse(formData);
-        setCourses([...courses, newCourse]);
+        await storeAddCourse(formData);
+        addNotification({ type: 'success', message: 'تم إضافة المادة بنجاح' });
       }
 
       setIsModalOpen(false);
@@ -155,7 +147,7 @@ export default function Courses() {
       setFormErrors({});
     } catch (error) {
       console.error('Error saving course:', error);
-      setError('فشل في حفظ المادة');
+      addNotification({ type: 'error', message: 'فشل في حفظ المادة' });
     } finally {
       setIsSubmitting(false);
     }
@@ -236,8 +228,7 @@ export default function Courses() {
             continue;
           }
 
-          const newCourse = await addCourse(courseData);
-          importedCourses.push(newCourse);
+          const newCourse = await storeAddCourse(courseData);
           importedCount++;
           setUploadProgress(Math.round((importedCount / total) * 90) + 10);
         } catch (err) {
@@ -245,12 +236,14 @@ export default function Courses() {
         }
       }
 
-      setCourses([...courses, ...importedCourses]);
+      }
+
+      addNotification({ type: 'success', message: `تم استيراد ${importedCount} مادة بنجاح` });
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(0), 2000);
     } catch (error) {
       console.error('Error importing courses:', error);
-      setError('فشل في استيراد المواد');
+      addNotification({ type: 'error', message: 'فشل في استيراد المواد' });
       setUploadProgress(0);
     }
   };
@@ -258,11 +251,11 @@ export default function Courses() {
   const handleDelete = async (id: number) => {
     if (window.confirm('هل أنت متأكد من حذف هذه المادة؟')) {
       try {
-        await deleteCourse(id);
-        setCourses(courses.filter(c => c.id !== id));
+        await storeDeleteCourse(id);
+        addNotification({ type: 'success', message: 'تم حذف المادة بنجاح' });
       } catch (error) {
         console.error('Error deleting course:', error);
-        setError('فشل في حذف المادة');
+        addNotification({ type: 'error', message: 'فشل في حذف المادة' });
       }
     }
   };

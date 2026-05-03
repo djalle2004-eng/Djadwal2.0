@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
-import { getGroups, addGroup, updateGroup, deleteGroup, buildGroupTree, getSpecializationsByDepartment } from '../services/groupService';
-import { getDepartments } from '../services/departmentService';
-import { Department, Group, GroupFormData, FormErrors } from '../types/shared';
-import { useAcademicYear } from '../context/AcademicYearContext';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { buildGroupTree, getSpecializationsByDepartment } from '../services/groupService';
 
 interface RowData {
   [key: string]: any;
@@ -22,10 +22,21 @@ interface SpecializationFormData {
 
 export default function Groups() {
   const { can } = usePermissions();
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { 
+    groups, 
+    departments, 
+    isLoading: loading, 
+    error: storeError, 
+    fetchGroups, 
+    fetchDepartments, 
+    addGroup: storeAddGroup,
+    updateGroup: storeUpdateGroup,
+    deleteGroup: storeDeleteGroup,
+    deleteAllGroups: storeDeleteAllGroups
+  } = useGroupsStore();
+  const { currentYear } = useAcademicStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
@@ -54,40 +65,33 @@ export default function Groups() {
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [selectedDuplicates, setSelectedDuplicates] = useState<Set<number>>(new Set());
 
-  const { currentYear } = useAcademicYear();
+  const currentYearName = currentYear?.year_name;
 
   // Debug logging
   useEffect(() => {
-    console.log('[Groups] Current year:', currentYear);
+    console.log('[Groups] Current year:', currentYearName);
     console.log('[Groups] All groups:', groups);
     console.log('[Groups] Groups years:', groups.map(g => g.year));
-  }, [currentYear, groups]);
+  }, [currentYearName, groups]);
 
   // Filter groups by current academic year with fallback
   const currentYearGroups = useMemo(() => {
-    if (!currentYear) {
+    if (!currentYearName) {
       console.log('[Groups] No current year set, showing all groups');
       return groups;
     }
     
     const filtered = groups.filter(group => {
-      const matches = group.year === currentYear.year_name;
-      if (!matches) {
-        console.log(`[Groups] Group "${group.name}" year "${group.year}" doesn't match current year "${currentYear.year_name}"`);
-      }
+      const matches = group.year === currentYearName;
       return matches;
     });
     
-    console.log(`[Groups] Filtered ${filtered.length} groups out of ${groups.length} for year "${currentYear.year_name}"`);
-    
-    // If no groups match current year, show all groups as fallback
     if (filtered.length === 0 && groups.length > 0) {
-      console.log('[Groups] No groups found for current year, showing all groups as fallback');
       return groups;
     }
     
     return filtered;
-  }, [groups, currentYear]);
+  }, [groups, currentYearName]);
 
   const sortedGroups = useMemo(() => {
     let sortableGroups = [...currentYearGroups];
@@ -159,21 +163,17 @@ export default function Groups() {
   const deleteSelectedDuplicates = async () => {
     if (selectedDuplicates.size === 0) return;
 
-    const confirmMessage = `هل أنت متأكد من حذف ${selectedDuplicates.size} مجموعة مكررة؟`;
-    if (!window.confirm(confirmMessage)) return;
+    if (!window.confirm(`هل أنت متأكد من حذف ${selectedDuplicates.size} مجموعة مكررة؟`)) return;
 
     try {
-      const deletePromises = Array.from(selectedDuplicates).map(id => deleteGroup(id));
-      await Promise.all(deletePromises);
-      
-      // Refresh groups list
-      const updatedGroups = await getGroups();
-      setGroups(updatedGroups);
+      for (const id of Array.from(selectedDuplicates)) {
+        await storeDeleteGroup(id);
+      }
       setSelectedDuplicates(new Set());
-      setError(null);
+      addNotification({ type: 'success', message: 'تم حذف المجموعات المكررة بنجاح' });
     } catch (error) {
       console.error('Error deleting duplicates:', error);
-      setError('فشل في حذف المجموعات المكررة');
+      addNotification({ type: 'error', message: 'فشل في حذف بعض المجموعات المكررة' });
     }
   };
 
@@ -190,23 +190,9 @@ export default function Groups() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const fetchedGroups = await getGroups();
-        const fetchedDepartments = await getDepartments();
-        setGroups(fetchedGroups);
-        setDepartments(fetchedDepartments);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('فشل في تحميل البيانات');
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+    fetchGroups();
+    fetchDepartments();
+  }, [fetchGroups, fetchDepartments]);
 
   const normalizeYear = (year: unknown): string => {
     const normalized = String(year).trim().toUpperCase();
@@ -278,7 +264,6 @@ export default function Groups() {
     setIsSubmitting(true);
 
     try {
-      // Prepare form data with proper type conversions
       const processedFormData: GroupFormData = {
         ...formData,
         department_id: formData.department_id ? Number(formData.department_id) : undefined,
@@ -288,25 +273,13 @@ export default function Groups() {
         year: formData.year || ''
       };
 
-      console.log('Processed form data:', processedFormData);
-
       if (editingGroup) {
-        // تأكد من أن المعرف موجود
-        if (editingGroup.id === undefined || editingGroup.id === null) {
-          throw new Error('معرف المجموعة غير محدد');
-        }
-        
-        console.log('جاري تحديث المجموعة بالمعرف:', editingGroup.id, typeof editingGroup.id);
-        
-        // تحديث مجموعة موجودة
-        const updatedGroup = await updateGroup(editingGroup.id, processedFormData);
-        console.log('تم تحديث المجموعة:', updatedGroup);
-        setGroups(groups.map(g => g.id === editingGroup.id ? updatedGroup : g));
+        if (!editingGroup.id) throw new Error('معرف المجموعة غير محدد');
+        await storeUpdateGroup(editingGroup.id, processedFormData);
+        addNotification({ type: 'success', message: 'تم تحديث المجموعة بنجاح' });
       } else {
-        // إضافة مجموعة جديدة
-        const newGroup = await addGroup(processedFormData);
-        console.log('تم إضافة مجموعة جديدة:', newGroup);
-        setGroups([...groups, newGroup]);
+        await storeAddGroup(processedFormData);
+        addNotification({ type: 'success', message: 'تم إضافة المجموعة بنجاح' });
       }
 
       setIsModalOpen(false);
@@ -321,7 +294,7 @@ export default function Groups() {
       setFormErrors({});
     } catch (error) {
       console.error('Error saving group:', error);
-      setError(`فشل في ${editingGroup ? 'تحديث' : 'إضافة'} المجموعة: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`);
+      addNotification({ type: 'error', message: 'فشل في حفظ المجموعة' });
     } finally {
       setIsSubmitting(false);
     }
@@ -330,28 +303,11 @@ export default function Groups() {
   const handleDelete = async (id: number) => {
     if (window.confirm('هل أنت متأكد من حذف هذه المجموعة؟')) {
       try {
-        console.log(`[Groups UI] محاولة حذف المجموعة ${id}`);
-        await deleteGroup(id);
-        
-        // Always refresh the groups list after deletion attempt
-        console.log(`[Groups UI] تحديث قائمة المجموعات بعد محاولة الحذف`);
-        const updatedGroups = await getGroups();
-        setGroups(updatedGroups);
-        setError(null);
-        
-        console.log(`[Groups UI] تم تحديث القائمة - العدد الجديد: ${updatedGroups.length}`);
+        await storeDeleteGroup(id);
+        addNotification({ type: 'success', message: 'تم حذف المجموعة بنجاح' });
       } catch (error) {
         console.error('Error deleting group:', error);
-        setError('فشل في حذف المجموعة');
-        
-        // Refresh groups list even on error to sync UI with database
-        try {
-          const updatedGroups = await getGroups();
-          setGroups(updatedGroups);
-          console.log(`[Groups UI] تم تحديث القائمة بعد الخطأ - العدد: ${updatedGroups.length}`);
-        } catch (refreshError) {
-          console.error('Error refreshing groups after failed deletion:', refreshError);
-        }
+        addNotification({ type: 'error', message: 'فشل في حذف المجموعة' });
       }
     }
   };
@@ -422,13 +378,9 @@ export default function Groups() {
             specialization: String(row['Specialization'] || '').trim(),
           };
 
-          // التحقق من البيانات المطلوبة
-          if (!groupData.name || !groupData.specialization) {
-            continue;
-          }
+          if (!groupData.name || !groupData.specialization) continue;
 
-          const newGroup = await addGroup(groupData);
-          importedGroups.push(newGroup);
+          await storeAddGroup(groupData);
           importedCount++;
           setUploadProgress(Math.round((importedCount / total) * 90) + 10);
         } catch (err) {
@@ -436,12 +388,12 @@ export default function Groups() {
         }
       }
 
-      setGroups([...groups, ...importedGroups]);
+      addNotification({ type: 'success', message: `تم استيراد ${importedCount} مجموعة بنجاح` });
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(0), 2000);
     } catch (error) {
       console.error('Error importing groups:', error);
-      setError('فشل في استيراد المجموعات');
+      addNotification({ type: 'error', message: 'فشل في استيراد المجموعات' });
       setUploadProgress(0);
     }
   };
@@ -559,7 +511,7 @@ export default function Groups() {
         specializationGroup = existingSpecialization;
       } else {
         // إنشاء مجموعة تخصص جديدة
-        specializationGroup = await addGroup({
+        specializationGroup = await storeAddGroup({
           name: specializationData.name,
           specialization: specializationData.name,
           department_id: departmentId,
@@ -568,10 +520,9 @@ export default function Groups() {
         });
       }
 
-      // إنشاء الأفواج
       for (let i = 1; i <= specializationData.groupCount; i++) {
         const groupName = `الفوج ${i} - ${specializationGroup.name}`;
-        await addGroup({
+        await storeAddGroup({
           name: groupName,
           specialization: specializationGroup.name,
           parent_group_id: specializationGroup.id,
@@ -581,9 +532,7 @@ export default function Groups() {
         });
       }
 
-      // تحديث قائمة المجموعات
-      const updatedGroups = await getGroups();
-      setGroups(updatedGroups);
+      addNotification({ type: 'success', message: 'تم إنشاء الأفواج آلياً بنجاح' });
 
       setIsAutomatedModalOpen(false);
       setIsAutoSubmitting(false);
@@ -623,20 +572,18 @@ export default function Groups() {
     try {
       const suggestedName = generateSuggestedGroupName(specialization);
       
-      const newGroupData: GroupFormData = {
+      await storeAddGroup({
         name: suggestedName,
         specialization: specialization.name,
         parent_group_id: specialization.id,
         department_id: specialization.department_id,
         group_type: 'group',
         year: specialization.year
-      };
-
-      const newGroup = await addGroup(newGroupData);
-      setGroups([...groups, newGroup]);
+      });
+      addNotification({ type: 'success', message: 'تم إضافة الفوج بنجاح' });
     } catch (error) {
       console.error('Error adding group to specialization:', error);
-      setError('فشل في إضافة الفوج للتخصص');
+      addNotification({ type: 'error', message: 'فشل في إضافة الفوج للتخصص' });
     }
   };
 

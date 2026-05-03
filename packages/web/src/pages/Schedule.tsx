@@ -1,8 +1,13 @@
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import DatabaseErrorAlert from '../components/DatabaseErrorAlert';
-import { AcademicYearContext } from '../context/AcademicYearContext';
-import { useAssignments } from '../context/AssignmentContext';
-import { useSandbox } from '../context/SandboxContext';
+import { useAcademicStore } from '../stores/useAcademicStore';
+import { useScheduleStore } from '../stores/useScheduleStore';
+import { useSandboxStore } from '../stores/useSandboxStore';
+import { useProfessorsStore } from '../stores/useProfessorsStore';
+import { useCoursesStore } from '../stores/useCoursesStore';
+import { useRoomsStore } from '../stores/useRoomsStore';
+import { useGroupsStore } from '../stores/useGroupsStore';
+import { useNotificationStore } from '../stores/useNotificationStore';
+import { useUIStore } from '../stores/useUIStore';
 import { printContent } from '../utils/printUtils';
 import { jsPDF } from 'jspdf';
 import { useKeyboardNavigation } from '../hooks/useKeyboardNavigation';
@@ -148,26 +153,67 @@ interface ScheduleStyleSettings {
 }
 
 export default function Schedule() {
-  // الصلاحيات
   const { can } = usePermissions();
 
-  // الحالة المحلية
-  const [professors, setProfessors] = useState<Professor[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
+  // Stores
+  const { 
+    professors, fetchProfessors 
+  } = useProfessorsStore();
+  const { 
+    courses, fetchCourses 
+  } = useCoursesStore();
+  const { 
+    rooms, fetchRooms 
+  } = useRoomsStore();
+  const { 
+    groups, departments, fetchGroups, fetchDepartments 
+  } = useGroupsStore();
+  const { 
+    currentYear, currentSemester 
+  } = useAcademicStore();
+  const { 
+    assignments: contextAssignments, 
+    isLoading: isScheduleLoading, 
+    error: scheduleError, 
+    fetchAssignments, 
+    addAssignment, 
+    updateAssignment, 
+    deleteAssignment 
+  } = useScheduleStore();
+  const {
+    isSandboxMode,
+    sandboxAssignments,
+    hasChanges,
+    enterSandboxMode,
+    exitSandboxMode,
+    addSandboxAssignment,
+    updateSandboxAssignment,
+    deleteSandboxAssignment,
+    commitChanges,
+    discardChanges,
+    undo,
+    redo,
+    history,
+    future,
+    saveDraft,
+    loadDraft
+  } = useSandboxStore();
+  const addNotification = useNotificationStore((state) => state.addNotification);
+  const { sidebarOpen } = useUIStore();
+
+  const canUndo = history.length > 0;
+  const canRedo = future.length > 0;
+
+  // Local State
   const [selectedDepartment, setSelectedDepartment] = useState<number>(0);
   const [specializations, setSpecializations] = useState<string[]>([]);
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [scheduleData, setScheduleData] = useState<ScheduleData>({});
   const [selectedCell, setSelectedCell] = useState<ScheduleCell & { dayIndex: number; timeIndex: number } | null>(null);
   const [isCellModalOpen, setIsCellModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
 
-  // إضافة حالات البحث
+  // Search states
   const [professorSearchTerm, setProfessorSearchTerm] = useState('');
   const [courseSearchTerm, setCourseSearchTerm] = useState('');
   const [roomSearchTerm, setRoomSearchTerm] = useState('');
@@ -178,12 +224,11 @@ export default function Schedule() {
   const [filteredCoursesSearch, setFilteredCoursesSearch] = useState<Course[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<Room[]>([]);
 
-  // Sandbox Save/Load State
+  // Draft states
   const [isSaveDraftModalOpen, setIsSaveDraftModalOpen] = useState(false);
   const [isLoadDraftModalOpen, setIsLoadDraftModalOpen] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [savedDrafts, setSavedDrafts] = useState<any[]>([]);
-  const { saveDraft, loadDraft, listDrafts, deleteDraft } = useSandbox();
 
   // Day/time filters state (used by professors filtering)
   const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
@@ -231,31 +276,6 @@ export default function Schedule() {
 
   // استخدام hook إعدادات الطباعة
   const { settings: printSettingsHook } = usePrintSettings();
-
-  // الحصول على السياق الأكاديمي
-  const academicYearContext = useContext(AcademicYearContext);
-  const currentYear = academicYearContext?.currentYear;
-  const currentSemester = academicYearContext?.currentSemester;
-
-  // استخدام السياق للتعامل مع التكاليف
-  const { assignments: contextAssignments, refreshAssignments, addAssignment, updateAssignment, deleteAssignment } = useAssignments();
-  const {
-    isSandboxMode,
-    enterSandboxMode,
-    exitSandboxMode,
-    sandboxAssignments,
-    addSandboxAssignment,
-    updateSandboxAssignment,
-    deleteSandboxAssignment,
-    commitChanges,
-    discardChanges,
-    hasChanges,
-    undo,
-    redo,
-    canUndo,
-    canRedo
-  } = useSandbox();
-
   // Drag & Drop State
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
@@ -389,12 +409,8 @@ export default function Schedule() {
           updateSandboxAssignment(assignment.id!, updatedSourceAssignment);
           updateSandboxAssignment(targetAssignment.id!, updatedTargetAssignment);
         } else {
-          // In live mode, we need to be careful. Update one then the other.
-          // Or better, use a batch update if available.
-          // For now, sequential updates.
           await updateAssignment(assignment.id!, updatedSourceAssignment);
           await updateAssignment(targetAssignment.id!, updatedTargetAssignment);
-          await refreshAssignments();
         }
       } else {
         // MOVE LOGIC (No conflict)
@@ -409,12 +425,11 @@ export default function Schedule() {
           updateSandboxAssignment(assignment.id!, updatedAssignment);
         } else {
           await updateAssignment(assignment.id!, updatedAssignment);
-          await refreshAssignments();
         }
       }
     } catch (error) {
       console.error("Error moving/swapping assignment:", error);
-      // setError(error instanceof Error ? error : new Error("خطأ أثناء نقل التكليف"));
+      addNotification({ type: 'error', message: 'خطأ أثناء نقل التكليف' });
     }
   };
 
@@ -488,80 +503,39 @@ export default function Schedule() {
     return Array.from(uniqueGroups.values());
   }, [groups, selectedSpecialization]);
 
-  // Initial data load when component mounts or year/semester changes
+  // Initial data load
   useEffect(() => {
-    if (currentYear && currentSemester && !initialDataLoaded.current) {
+    if (!initialDataLoaded.current) {
       fetchData();
       initialDataLoaded.current = true;
     }
-  }, [currentYear, currentSemester]);
+  }, []);
 
-  // Update schedule data when contextAssignments or sandboxAssignments changes
+  // Update schedule data when assignments change
   useEffect(() => {
     const assignmentsToUse = isSandboxMode ? sandboxAssignments : contextAssignments;
-    if (assignmentsToUse.length >= 0 && currentYear && currentSemester) {
-      prepareScheduleData(assignmentsToUse);
-    }
+    prepareScheduleData(assignmentsToUse);
   }, [contextAssignments, sandboxAssignments, isSandboxMode, currentYear, currentSemester, selectedSpecialization]);
-
-  // Update schedule data when specialization changes
-  useEffect(() => {
-    const assignmentsToUse = isSandboxMode ? sandboxAssignments : contextAssignments;
-    if (selectedSpecialization && assignmentsToUse.length > 0) {
-      prepareScheduleData(assignmentsToUse);
-    }
-  }, [selectedSpecialization]);
 
   // جلب البيانات من قاعدة البيانات
   const fetchData = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // جلب البيانات من قاعدة البيانات
-      const [fetchedGroups, fetchedCourses, fetchedProfessors, fetchedRooms, fetchedDepartments] = await Promise.all([
-        window.db.getGroups(),
-        window.db.getCourses(),
-        window.db.getProfessors(),
-        window.db.getRooms(),
-        window.db.getDepartments()
+      await Promise.all([
+        fetchGroups(),
+        fetchCourses(),
+        fetchProfessors(),
+        fetchRooms(),
+        fetchDepartments(),
+        fetchAssignments()
       ]);
 
-      // تعيين البيانات في الحالة
-      setGroups(fetchedGroups);
-      setCourses(fetchedCourses);
-      setProfessors(fetchedProfessors);
-      setRooms(fetchedRooms);
-      setDepartments(fetchedDepartments);
-
       // تعيين التخصص الافتراضي إذا كانت هناك تخصصات
-      const uniqueSpecializations = new Set<string>();
-      fetchedGroups.forEach(group => {
-        if (group.specialization && group.specialization.trim() !== '') {
-          uniqueSpecializations.add(group.specialization.trim());
-        }
-      });
-
-      // تعيين قائمة التخصصات
-      const specializationsList = Array.from(uniqueSpecializations).sort();
-      setSpecializations(specializationsList);
-
-      // تعيين التخصص الافتراضي إذا لم يكن محددًا بالفعل
-      if (specializationsList.length > 0 && (!selectedSpecialization || !specializationsList.includes(selectedSpecialization))) {
-        setSelectedSpecialization(specializationsList[0]);
+      if (uniqueSpecializations.length > 0 && (!selectedSpecialization || !uniqueSpecializations.includes(selectedSpecialization))) {
+        setSelectedSpecialization(uniqueSpecializations[0]);
       }
-
-      // تحديث التكاليف من السياق
-      await refreshAssignments();
-
-      // تجهيز بيانات الجدول
-      const assignmentsToUse = isSandboxMode ? sandboxAssignments : contextAssignments;
-      prepareScheduleData(assignmentsToUse);
     } catch (error) {
       console.error("Error fetching data:", error);
-      setError(error instanceof Error ? error : new Error("خطأ أثناء جلب البيانات"));
-    } finally {
-      setIsLoading(false);
+      addNotification({ type: 'error', message: 'خطأ أثناء جلب البيانات' });
     }
   };
 
@@ -688,46 +662,34 @@ export default function Schedule() {
   const handleDeleteAssignment = async (assignmentId: number) => {
     if (!window.confirm("هل أنت متأكد من حذف هذا التكليف؟")) return;
     try {
-      setIsLoading(true);
       if (isSandboxMode) {
         deleteSandboxAssignment(assignmentId);
       } else {
         await deleteAssignment(assignmentId);
-        await refreshAssignments();
       }
-      console.log(`Assignment ${assignmentId} deleted`);
+      addNotification({ type: 'success', message: 'تم حذف التكليف بنجاح' });
     } catch (error) {
       console.error("Error deleting assignment:", error);
-      setError(error instanceof Error ? error : new Error("خطأ أثناء حذف التكليف"));
-    } finally {
-      setIsLoading(false);
+      addNotification({ type: 'error', message: 'خطأ أثناء حذف التكليف' });
     }
   };
 
   // حفظ بيانات الخلية
   const handleSaveCell = async (dayIndex: number, timeIndex: number, cell: ScheduleCell & { dayIndex: number; timeIndex: number }) => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // التحقق من صحة البيانات
       if (!cell.group_id || !cell.course_id || !cell.professor_id || !cell.room_id) {
-        setError(new Error("جميع الحقول مطلوبة"));
-        setIsLoading(false);
+        addNotification({ type: 'error', message: 'جميع الحقول مطلوبة' });
         return;
       }
 
-      // Get the specialization from the selected group
       const selectedGroup = groups.find(g => g.id === cell.group_id);
       if (!selectedGroup) {
-        setError(new Error("المجموعة المحددة غير موجودة"));
-        setIsLoading(false);
+        addNotification({ type: 'error', message: 'المجموعة المحددة غير موجودة' });
         return;
       }
 
       const groupSpecialization = selectedGroup.specialization || '';
 
-      // إنشاء كائن التكليف
       const assignment: Assignment = {
         group_id: cell.group_id,
         course_id: cell.course_id,
@@ -738,88 +700,91 @@ export default function Schedule() {
         end_time: timeSlots[timeIndex].end,
         academic_year: currentYear?.year_name || '',
         semester: currentSemester?.semester_name || '',
-        specialization: groupSpecialization // Use the group's specialization
+        specialization: groupSpecialization
       };
 
-      console.log('Saving assignment:', assignment);
-
-      console.log('Saving assignment:', assignment);
-
-      // التحقق من وجود تكليف سابق (للتحديث)
       let existingAssignment = null;
-
-      // أولوية البحث بالمعرف إذا كنا نقوم بالتعديل
       if (editingAssignmentId) {
         const list = isSandboxMode ? sandboxAssignments : contextAssignments;
         existingAssignment = list.find((a: Assignment) => a.id === editingAssignmentId);
       }
 
-      // إذا لم يتم العثور عليه بالمعرف (أو لم يكن هناك معرف)، ابحث بالطريقة القديمة (للحالات الأخرى)
-      if (!existingAssignment) {
-        existingAssignment = contextAssignments.find((a: Assignment) =>
-          a.day_of_week === dayIndex &&
-          a.start_time === timeSlots[timeIndex].start &&
-          a.end_time === timeSlots[timeIndex].end &&
-          a.academic_year === (currentYear?.year_name || '') &&
-          a.semester === (currentSemester?.semester_name || '') &&
-          a.group_id === cell.group_id // Match by group_id instead of specialization
-        );
-      }
-
-      try {
-        // إذا كان في وضع التجربة (Sandbox Mode)
-        if (isSandboxMode) {
-          if (existingAssignment && existingAssignment.id) {
-            updateSandboxAssignment(existingAssignment.id, assignment);
-            console.log(`تم تحديث التكليف في وضع التجربة`);
-          } else {
-            addSandboxAssignment(assignment);
-            console.log("تم إضافة تكليف جديد في وضع التجربة");
-          }
-          setIsLoading(false);
-          setIsCellModalOpen(false);
-          return;
-        }
-
-        // إذا كان هناك تكليف سابق، قم بتحديثه، وإلا قم بإضافة تكليف جديد
+      if (isSandboxMode) {
         if (existingAssignment && existingAssignment.id) {
-          await updateAssignment(existingAssignment.id, assignment);
-          console.log(`تم تحديث التكليف رقم ${existingAssignment.id}`);
+          updateSandboxAssignment(existingAssignment.id, assignment);
         } else {
-          // Check for conflicts before adding the assignment
-          const result = await addAssignment(assignment);
-          console.log("تم إضافة تكليف جديد", result);
+          addSandboxAssignment(assignment);
         }
-
-        // إعادة تحميل البيانات
-        await refreshAssignments();
-      } catch (error) {
-        console.error("Error saving cell:", error);
-
-        // Check if it's a conflict error
-        if (error instanceof Error && error.message.includes("تعارض في الجدول الزمني")) {
-          // Get professor, group and room names for better error message
-          const professorName = professors.find(p => p.id === cell.professor_id)?.name || '';
-          const groupName = groups.find(g => g.id === cell.group_id)?.name || '';
-          const roomName = rooms.find(r => r.id === cell.room_id)?.name || '';
-
-          setError(new Error(`يوجد تعارض في الجدول الزمني:
-          - قد يكون الأستاذ "${professorName}" مشغولاً في هذا الوقت
-          - أو المجموعة "${groupName}" لديها محاضرة أخرى
-          - أو القاعة "${roomName}" محجوزة لمحاضرة أخرى
-          
-          الرجاء اختيار وقت آخر أو تغيير الأستاذ/المجموعة/القاعة.`));
-        } else {
-          setError(error instanceof Error ? error : new Error("خطأ أثناء حفظ التكليف"));
-        }
+        setIsCellModalOpen(false);
+        addNotification({ type: 'success', message: 'تم حفظ التكليف في وضع التجربة' });
+        return;
       }
+
+      if (existingAssignment && existingAssignment.id) {
+        await updateAssignment(existingAssignment.id, assignment);
+        addNotification({ type: 'success', message: 'تم تحديث التكليف بنجاح' });
+      } else {
+        await addAssignment(assignment);
+        addNotification({ type: 'success', message: 'تم إضافة التكليف بنجاح' });
+      }
+
+      setIsCellModalOpen(false);
     } catch (error) {
       console.error("Error saving cell:", error);
-      setError(error instanceof Error ? error : new Error("خطأ أثناء حفظ التكليف"));
-    } finally {
-      setIsLoading(false);
-      setIsCellModalOpen(false);
-      setEditingAssignmentId(null);
+      if (error instanceof Error && error.message.includes("تعارض")) {
+        addNotification({ type: 'error', message: error.message });
+      } else {
+        addNotification({ type: 'error', message: 'فشل في حفظ التكليف' });
+      }
+    }
+  };
+
+  // تنفيذ التغييرات من وضع التجربة إلى قاعدة البيانات الحقيقية
+  const handleCommitSandbox = async () => {
+    if (!window.confirm("هل أنت متأكد من حفظ جميع التغييرات في قاعدة البيانات؟")) return;
+    try {
+      await commitChanges();
+      addNotification({ type: 'success', message: 'تم حفظ جميع التغييرات بنجاح' });
+    } catch (error) {
+      console.error("Error committing sandbox:", error);
+      addNotification({ type: 'error', message: 'خطأ أثناء حفظ التغييرات' });
+    }
+  };
+
+  // إلغاء التغييرات والخروج من وضع التجربة
+  const handleDiscardSandbox = () => {
+    if (hasChanges && !window.confirm("هل أنت متأكد من إلغاء جميع التغييرات غير المحفوظة؟")) return;
+    discardChanges();
+    exitSandboxMode();
+    addNotification({ type: 'info', message: 'تم إلغاء التغييرات والخروج من وضع التجربة' });
+  };
+
+  // حفظ مسودة جديدة
+  const handleSaveDraft = async () => {
+    if (!draftName.trim()) {
+      addNotification({ type: 'error', message: 'يرجى إدخال اسم للمسودة' });
+      return;
+    }
+    try {
+      await saveDraft(draftName);
+      setDraftName('');
+      setIsSaveDraftModalOpen(false);
+      addNotification({ type: 'success', message: 'تم حفظ المسودة بنجاح' });
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      addNotification({ type: 'error', message: 'خطأ أثناء حفظ المسودة' });
+    }
+  };
+
+  // تحميل مسودة
+  const handleLoadDraft = async (draftId: number) => {
+    try {
+      await loadDraft(draftId);
+      setIsLoadDraftModalOpen(false);
+      addNotification({ type: 'success', message: 'تم تحميل المسودة بنجاح' });
+    } catch (error) {
+      console.error("Error loading draft:", error);
+      addNotification({ type: 'error', message: 'خطأ أثناء تحميل المسودة' });
     }
   };
 

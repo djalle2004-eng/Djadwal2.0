@@ -71,3 +71,7 @@ coverage
 release/
 app/dist
 client_secret_*.json
+# Temporary files
+build_error.txt
+build_error_utf8.txt
+check-case.js
