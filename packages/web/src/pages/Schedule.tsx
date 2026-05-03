@@ -10,6 +10,7 @@ import { useRooms } from '../hooks/queries/useRooms';
 import { useGroups, useDepartments } from '../hooks/queries/useGroups';
 import { useAssignments, useCreateAssignment, useUpdateAssignment, useDeleteAssignment } from '../hooks/queries/useAssignments';
 import { useTimeSlots } from '../hooks/queries/useTimeSlots';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSchedule } from '../hooks/queries/useSchedule';
 import { printContent } from '../utils/printUtils';
 import { jsPDF } from 'jspdf';
@@ -159,6 +160,7 @@ interface ScheduleStyleSettings {
 
 export default function Schedule() {
   const { can } = usePermissions();
+  const queryClient = useQueryClient();
 
   // Queries
   const { data: professors = [], isLoading: isProfessorsLoading } = useProfessors();
@@ -505,7 +507,7 @@ export default function Schedule() {
 
   // Helper function to check if a professor is temporary
   const isProfessorTemporary = (professor: Professor) => {
-    return professor.Title === 'أستاذ(ة) مؤقت(ة)';
+    return professor.title === 'أستاذ(ة) مؤقت(ة)';
   };
 
   // Use ref to track if initial data has been loaded
@@ -934,11 +936,11 @@ export default function Schedule() {
 
       // Refresh the assignments
       if (!isSandboxMode) {
-        await refreshAssignments();
+        await queryClient.invalidateQueries({ queryKey: ['assignments'] });
       }
     } catch (error) {
       console.error("Error deleting cell:", error);
-      setError(error instanceof Error ? error : new Error("خطأ أثناء حذف التكليف"));
+      // setError(error instanceof Error ? error : new Error("خطأ أثناء حذف التكليف"));
     } finally {
       setLocalIsLoading(false);
     }
@@ -1256,7 +1258,7 @@ export default function Schedule() {
                   {group && <div className="font-bold">{group.name}</div>}
                   {course && <div>{course.name}</div>}
                   {professor && (
-                    <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                    <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                       {professor.name}
                     </div>
                   )}
@@ -1268,7 +1270,7 @@ export default function Schedule() {
                 {group && <div className="font-bold">{group.name}</div>}
                 {course && <div>{course.name}</div>}
                 {professor && (
-                  <div className={`text-xs ${professor.Title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
+                  <div className={`text-xs ${professor.title === 'أستاذ(ة) مؤقت(ة)' ? 'text-red-600 font-bold' : ''}`}>
                     {professor.name}
                   </div>
                 )}
@@ -2538,7 +2540,7 @@ export default function Schedule() {
         }
 
         // Rafraîchir les affectations
-        await refreshAssignments();
+        await queryClient.invalidateQueries({ queryKey: ['assignments'] });
 
         // Vérifier le nombre d'affectations après nettoyage
         const remainingAssignments = await window.db.getAssignments();
@@ -2550,7 +2552,7 @@ export default function Schedule() {
       }
     } catch (error) {
       console.error('خطأ في تنظيف التكاليف المكررة:', error);
-      setError(error instanceof Error ? error : new Error('خطأ غير معروف'));
+      // setError(error instanceof Error ? error : new Error('خطأ غير معروف'));
     } finally {
       setLocalIsLoading(false);
     }
@@ -2818,7 +2820,7 @@ export default function Schedule() {
 
       {
         scheduleError && (
-          <DatabaseErrorAlert error={scheduleError} onRetry={() => window.location.reload()} />
+          <DatabaseErrorAlert error={scheduleError} onRetry={async () => { window.location.reload(); }} />
         )
       }
 
