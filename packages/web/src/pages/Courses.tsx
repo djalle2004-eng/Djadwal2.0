@@ -2,20 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { usePermissions } from '../hooks/usePermissions';
 import { read, utils, writeFile } from 'xlsx';
 import { Search, ChevronUp, ChevronDown } from 'lucide-react';
+
+const SearchIcon = Search as any;
+const ChevronUpIcon = ChevronUp as any;
+const ChevronDownIcon = ChevronDown as any;
 // import { db } from '../lib/firebase';
 // import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { useCourses, useCreateCourse, useUpdateCourse, useDeleteCourse } from '../hooks/queries/useCourses';
 import { useNotificationStore } from '../stores/useNotificationStore';
 
-interface Course {
-  id: number;
-  name: string;
-  code: string;
-  description: string;
-  credits: number;
-  coefficient: number;
-  created_at?: string;
-}
+import { Course } from '../api/courses';
 
 interface CourseFormData {
   name: string;
@@ -277,7 +273,7 @@ export default function Courses() {
       } else if (sortField === 'code') {
         return sortDirection === 'asc' ? a.code.localeCompare(b.code) : b.code.localeCompare(a.code);
       } else if (sortField === 'description') {
-        return sortDirection === 'asc' ? a.description.localeCompare(b.description) : b.description.localeCompare(a.description);
+        return sortDirection === 'asc' ? (a.description || '').localeCompare(b.description || '') : (b.description || '').localeCompare(a.description || '');
       } else if (sortField === 'credits') {
         return sortDirection === 'asc' ? a.credits - b.credits : b.credits - a.credits;
       } else if (sortField === 'coefficient') {
@@ -327,7 +323,7 @@ export default function Courses() {
       <div className="mt-4 mb-6">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400" />
+            <SearchIcon className="h-5 w-5 text-gray-400" />
           </div>
           <input
             type="search"
@@ -412,12 +408,12 @@ export default function Courses() {
                           >
                             {sortField === 'name' ? (
                               sortDirection === 'asc' ? (
-                                <ChevronUp size={16} />
+                                <ChevronUpIcon size={16} />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDownIcon size={16} />
                               )
                             ) : (
-                              <Search size={16} />
+                              <SearchIcon size={16} />
                             )}
                           </button>
                         </div>
@@ -432,12 +428,12 @@ export default function Courses() {
                           >
                             {sortField === 'code' ? (
                               sortDirection === 'asc' ? (
-                                <ChevronUp size={16} />
+                                <ChevronUpIcon size={16} />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDownIcon size={16} />
                               )
                             ) : (
-                              <Search size={16} />
+                              <SearchIcon size={16} />
                             )}
                           </button>
                         </div>
@@ -452,12 +448,12 @@ export default function Courses() {
                           >
                             {sortField === 'description' ? (
                               sortDirection === 'asc' ? (
-                                <ChevronUp size={16} />
+                                <ChevronUpIcon size={16} />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDownIcon size={16} />
                               )
                             ) : (
-                              <Search size={16} />
+                              <SearchIcon size={16} />
                             )}
                           </button>
                         </div>
@@ -472,12 +468,12 @@ export default function Courses() {
                           >
                             {sortField === 'credits' ? (
                               sortDirection === 'asc' ? (
-                                <ChevronUp size={16} />
+                                <ChevronUpIcon size={16} />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDownIcon size={16} />
                               )
                             ) : (
-                              <Search size={16} />
+                              <SearchIcon size={16} />
                             )}
                           </button>
                         </div>
@@ -492,12 +488,12 @@ export default function Courses() {
                           >
                             {sortField === 'coefficient' ? (
                               sortDirection === 'asc' ? (
-                                <ChevronUp size={16} />
+                                <ChevronUpIcon size={16} />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDownIcon size={16} />
                               )
                             ) : (
-                              <Search size={16} />
+                              <SearchIcon size={16} />
                             )}
                           </button>
                         </div>
