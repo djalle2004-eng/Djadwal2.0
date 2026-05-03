@@ -17,6 +17,7 @@
     "puppeteer": "^24.4.0",
     "dotenv": "^16.4.7",
     "bcryptjs": "^2.4.3",
-    "jose": "^5.9.6"
+    "jose": "^5.9.6",
+    "nodemailer": "^6.9.13"
   }
 }
