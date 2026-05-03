@@ -61,7 +61,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          mui: ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-date-pickers'],
+          aggrid: ['ag-grid-community', 'ag-grid-react'],
+          pdf: ['jspdf', 'jspdf-autotable', 'pdf-lib', '@react-pdf/renderer', 'html2pdf.js'],
+          utils: ['axios', 'date-fns', 'exceljs', 'xlsx', 'lucide-react']
         },
         assetFileNames: (assetInfo) => {
           if (assetInfo.name?.endsWith('.svg')) {
