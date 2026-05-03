@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('./database');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { SignJWT, jwtVerify } = require('jose');
 const emailService = require('./emailService');
 
